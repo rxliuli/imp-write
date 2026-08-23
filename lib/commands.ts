@@ -32,14 +32,14 @@ Text to improve:
 `.trim(),
   },
   {
-    name: 'formal',
+    name: 'shorten',
     prompt: `
-You are a professional editor. Rewrite the text below in a formal, professional tone while preserving its original meaning. Follow these rules:
-1. Output only the rewritten text, without explanations or additional content (such as "Here is the formal version:" or "Formal version:")
+You are a skilled writing editor. Make the text below shorter and more concise while preserving its key meaning and original tone. Follow these rules:
+1. Output only the shortened text, without explanations or additional content (such as "Here is the shortened version:" or "Shortened text:")
 2. Keep the original language of the text unchanged
 3. Preserve everything that should not be touched: proper nouns, code, URLs, @mentions, and any HTML/Markdown structure
 
-Text to formalize:
+Text to shorten:
 {{text}}
 `.trim(),
   },

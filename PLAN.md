@@ -4,7 +4,7 @@
 
 ## 1. 背景与定位
 
-imp-write 是一个浏览器扩展：在**任意网页输入框内**用命令改写文本 —— 用户输入文字后追加 `?fix` / `?improve` / `?formal` 或自定义命令并触发，AI 处理后**就地替换**原文。
+imp-write 是一个浏览器扩展：在**任意网页输入框内**用命令改写文本 —— 用户输入文字后追加 `?fix` / `?improve` / `?shorten` 或自定义命令并触发，AI 处理后**就地替换**原文。
 
 - 起源：Discord 用户请求（对标 ShortcutAI，但 ShortcutAI 订阅制且不支持自带 API key —— 这就是市场缺口）。
 - 定位：**双轨免费/付费** —— BYOK（自带 OpenAI 兼容端点 + key，完全免费）+ Imp Credits 托管积分（一键连接、装完即用，见 §6）。
@@ -52,7 +52,7 @@ imp-write 是一个浏览器扩展：在**任意网页输入框内**用命令改
 - 执行范围 v1：**整个输入框内容**（去掉命令 token 后作为 `{{text}}`）。选区级处理不做。
 
 ### 4.2 命令系统
-- 内置：`fix`（改语法拼写标点，保持原语言）、`improve`（润色）、`formal`（正式化）。prompt 参考 input-translator `lib/settings.ts` 里 Prompt 常量的写法（只输出结果、不加解释、保留不该动的内容）。
+- 内置：`fix`（改语法拼写标点，保持原语言）、`improve`（润色）、`shorten`（缩短精简）。prompt 参考 input-translator `lib/settings.ts` 里 Prompt 常量的写法（只输出结果、不加解释、保留不该动的内容）。
 - 自定义：`{name, prompt}` 无限量，prompt 模板变量 `{{text}}`。存 settings。
 - 输出即替换：AI 返回后整体写回输入框（写回机制照抄 input-translator）；写回前把原文存内存，替换后再次三连空格或 Esc 可还原（简单 undo，别依赖浏览器原生 undo 栈的跨框架行为）。
 

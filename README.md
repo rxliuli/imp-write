@@ -4,7 +4,7 @@ A browser extension that fixes and rewrites text in any textbox, without leaving
 
 ## Usage
 
-Type your text, then append a command at the end — `/fix`, `/improve`, `/formal`, `/tl`
+Type your text, then append a command at the end — `/fix`, `/improve`, `/shorten`, `/tl`
 (translate to English), or any custom command you've defined — and pause briefly. The AI
 response replaces the input's content in place. Press Esc right after to undo the
 replacement — or use your browser/OS's own undo (Cmd/Ctrl+Z); either way, undoing won't

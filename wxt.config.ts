@@ -1,6 +1,5 @@
 import { defineConfig, UserManifest } from 'wxt'
 import tailwindcss from '@tailwindcss/vite'
-import isCI from 'is-ci'
 
 export default defineConfig({
   modules: ['@wxt-dev/module-react', '@extport/wxt'],
@@ -45,14 +44,6 @@ export default defineConfig({
         },
       },
       homepage_url: 'https://rxliuli.com/project/imp-write',
-    }
-
-    // 仅本地/手动打包时固定扩展 ID；CI 上架到 CWS 时去掉 key。
-    // key 是 DER 公钥的 base64，用 key.pem 导出：
-    //   openssl pkey -in key.pem -pubout -outform DER | openssl base64 -A
-    if (!isCI) {
-      manifest.key =
-        'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzGkXYEKdUbzyte/Hj72rDKfmYAssmdUg0nA9ztv9LUkG5426TSkX2u4oHADCWCiNS0h/w1gXzSYC59GIeHFygoKHyW0+x3uGB1BxAUryrnS2A+fDosf6FQIc/aGJYDx7+wTih0QUBUcBtW6KKoobp9+RCI1w1KJa86eXYGF9qceihZfMPYqCeAtHk46gBMN8jicsiFW+dzU6HUPwgefrqIJ39Kw5b7I/OOX+m+By7gXhWDsOBzZIEK6IN8KtDjvn6dgy5YM3SxOxlFlbOaLsSRVeJGF5xbH/PDvemm2yhwq9v3HCKr3Pp89mkEl5eiVk35Us+8Gno0JNoaSK2K0tGwIDAQAB'
     }
 
     if (env.browser === 'firefox') {

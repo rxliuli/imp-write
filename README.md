@@ -96,44 +96,6 @@ Generate production builds and create zip files for distribution:
 pnpm zip && pnpm zip:firefox
 ```
 
-#### Stable extension ID (local vs. CI)
-
-Chrome derives an extension's ID from a public key, so the ID stays stable only if the
-key stays the same. Without an explicit `key`, every fresh load/re-install gets a new
-generated ID.
-
-This repo takes a `key` into account only for **local** builds, via `is-ci` in
-`wxt.config.ts`:
-
-- **Local** `pnpm build` / `pnpm zip` → the manifest includes `key`, so loading the
-  build (`Load unpacked` on `.output/chrome-mv3` or dragging the zip in) always yields
-  the exact same extension ID:
-
-  ```
-  neiaiilbnhnfhickkhphbpcgnbhaiihj
-  ```
-
-- **CI** → the `key` is omitted from the manifest, so a package uploaded to the Chrome
-  Web Store doesn't carry it (CWS assigns its own ID).
-
-The private key lives in `key.pem` at the project root, which is git-ignored. **Keep it
-local — never commit or delete it.** It's what makes the ID recoverable later and is
-required to sign a `.crx` (the key must match the public key in the manifest).
-
-If the `.pem` is ever regenerated, the ID changes. To re-export the public key for the
-manifest:
-
-```sh
-openssl pkey -in key.pem -pubout -outform DER | openssl base64 -A
-```
-
-and update the `manifest.key` value in `wxt.config.ts`. To view the ID the current key
-would produce:
-
-```sh
-node -e "const c=require('crypto');const k=require('fs').readFileSync('.output/chrome-mv3/manifest.json','utf8');const m=JSON.parse(k);if(!m.key){console.log('no key');process.exit(0)}const h=c.createHash('sha256').update(Buffer.from(m.key,'base64')).digest().subarray(0,16);let id='';for(const b of h)id+=String.fromCharCode(97+(b>>4))+String.fromCharCode(97+(b&15));console.log(id)"
-```
-
 ### Safari
 
 Safari extension requires macOS environment and Xcode for building and publishing.

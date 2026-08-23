@@ -9,7 +9,7 @@ export default defineConfig({
     // Daily anonymous usage ping + the Firefox data-collection declaration,
     // injected by @extport/wxt. Opt-in; fill the store data-disclosure forms
     // before shipping it: https://github.com/rxliuli/extport/blob/main/docs/analytics-design.md
-    // analytics: true,
+    analytics: true,
     // Publishing to Safari? Uncomment and fill in your own values —
     // extport.config.json is generated from these at `wxt prepare`.
     // safari: {

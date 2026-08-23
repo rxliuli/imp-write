@@ -60,61 +60,61 @@ jobs:
             ${{ env.DIRECTORY }}/.output/${{ env.PROJECT_NAME }}-${{ needs.version.outputs.version }}-firefox.zip
             ${{ env.DIRECTORY }}/.output/${{ env.PROJECT_NAME }}-${{ needs.version.outputs.version }}-sources.zip
 
-      - name: Push to Chrome Web Store
-        uses: extport-dev/actions/push@v1
-        with:
-          # file/version/extension inferred from .output/, its manifest.json, and extport.config.json.
-          store: chrome
-          api-key: ${{ secrets.EXTPORT_API_KEY }}
+  #     - name: Push to Chrome Web Store
+  #       uses: extport-dev/actions/push@v1
+  #       with:
+  #         # file/version/extension inferred from .output/, its manifest.json, and extport.config.json.
+  #         store: chrome
+  #         api-key: ${{ secrets.EXTPORT_API_KEY }}
 
-      - name: Push to Edge Add-ons
-        uses: extport-dev/actions/push@v1
-        with:
-          # Edge is Chromium-based — extport falls back to the chrome zip
-          # when no dedicated edge one was built.
-          store: edge
-          api-key: ${{ secrets.EXTPORT_API_KEY }}
+  #     - name: Push to Edge Add-ons
+  #       uses: extport-dev/actions/push@v1
+  #       with:
+  #         # Edge is Chromium-based — extport falls back to the chrome zip
+  #         # when no dedicated edge one was built.
+  #         store: edge
+  #         api-key: ${{ secrets.EXTPORT_API_KEY }}
 
-      - name: Push to Firefox AMO
-        uses: extport-dev/actions/push@v1
-        with:
-          # file/version/source-zip all inferred from .output/ conventions.
-          store: firefox
-          api-key: ${{ secrets.EXTPORT_API_KEY }}
+  #     - name: Push to Firefox AMO
+  #       uses: extport-dev/actions/push@v1
+  #       with:
+  #         # file/version/source-zip all inferred from .output/ conventions.
+  #         store: firefox
+  #         api-key: ${{ secrets.EXTPORT_API_KEY }}
 
-  safari:
-    needs: version
-    if: needs.version.outputs.changed == 'true'
-    runs-on: macos-26
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: 'pnpm'
-      - name: Install dependencies
-        run: pnpm install
+  # safari:
+  #   needs: version
+  #   if: needs.version.outputs.changed == 'true'
+  #   runs-on: macos-26
+  #   continue-on-error: true
+  #   steps:
+  #     - uses: actions/checkout@v5
+  #     - uses: pnpm/action-setup@v6
+  #     - uses: actions/setup-node@v6
+  #       with:
+  #         node-version: 24
+  #         cache: 'pnpm'
+  #     - name: Install dependencies
+  #       run: pnpm install
 
-      - name: Build Safari extension
-        run: pnpm build:safari
+  #     - name: Build Safari extension
+  #       run: pnpm build:safari
 
-      - uses: extport-dev/actions/safari-build@v1
-        with:
-          # project-path/team-id inferred from extport.config.json (synced by
-          # @extport/wxt). Automatic code signing via -allowProvisioningUpdates
-          # — no certificate/provisioning-profile secrets needed.
-          issuer-id: ${{ secrets.APPLE_API_ISSUER }}
-          key-id: ${{ secrets.APPLE_API_KEY_ID }}
-          key-base64: ${{ secrets.APPLE_API_KEY }}
-          version: ${{ needs.version.outputs.version }}
+  #     - uses: extport-dev/actions/safari-build@v1
+  #       with:
+  #         # project-path/team-id inferred from extport.config.json (synced by
+  #         # @extport/wxt). Automatic code signing via -allowProvisioningUpdates
+  #         # — no certificate/provisioning-profile secrets needed.
+  #         issuer-id: ${{ secrets.APPLE_API_ISSUER }}
+  #         key-id: ${{ secrets.APPLE_API_KEY_ID }}
+  #         key-base64: ${{ secrets.APPLE_API_KEY }}
+  #         version: ${{ needs.version.outputs.version }}
 
-      - name: Register the Safari version with extport
-        uses: extport-dev/actions/push@v1
-        with:
-          # version/extension inferred — no zip travels through extport for safari.
-          # Submission for review happens on its own once extport's reconcile
-          # sees the build finish processing in App Store Connect.
-          store: safari
-          api-key: ${{ secrets.EXTPORT_API_KEY }}
+  #     - name: Register the Safari version with extport
+  #       uses: extport-dev/actions/push@v1
+  #       with:
+  #         # version/extension inferred — no zip travels through extport for safari.
+  #         # Submission for review happens on its own once extport's reconcile
+  #         # sees the build finish processing in App Store Connect.
+  #         store: safari
+  #         api-key: ${{ secrets.EXTPORT_API_KEY }}

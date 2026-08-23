@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { ExternalLink } from 'lucide-react'
 import { FaDiscord } from 'react-icons/fa'
 import { browser } from 'wxt/browser'
 import { ShadowProvider } from '@/integrations/shadow/ShadowProvider'
@@ -53,9 +54,15 @@ export function App(props: { container: HTMLElement }) {
           <header className="flex items-center justify-between gap-2">
             <div>
               <h1 className="text-2xl font-bold">Imp Write</h1>
-              <p className="text-sm text-muted-foreground">
-                AI fix & rewrite in any textbox.
-              </p>
+              <a
+                href="https://store.rxliuli.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-primary transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                Explore our other extensions
+              </a>
             </div>
             <a
               href="https://discord.gg/gFhKUthc88"

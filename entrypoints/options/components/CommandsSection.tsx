@@ -11,6 +11,13 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -96,7 +103,7 @@ function CommandFormFields({
           value={prompt}
           onChange={(e) => onPromptChange(e.target.value)}
           placeholder={'Rewrite the text below to be more concise.\n\n{{text}}'}
-          className="min-h-24 font-mono text-xs"
+          className="min-h-40 font-mono text-xs"
         />
         <p className="text-xs text-muted-foreground">
           Use <code className="rounded bg-muted px-1">{'{{text}}'}</code>{' '}
@@ -129,12 +136,19 @@ export function CommandsSection({
   const [draftPrompt, setDraftPrompt] = useState('')
   const [error, setError] = useState<string | null>(null)
   const importInputRef = useRef<HTMLInputElement>(null)
+  // Snapshot of the draft's values as of the moment the dialog was opened —
+  // compared against the live draft to decide whether an outside click/Esc
+  // should be treated as an accidental dismiss (dirty) or a no-op close
+  // (clean). Kept in a ref (not state) since it's only ever read, never
+  // rendered.
+  const initialDraftRef = useRef({ name: '', prompt: '' })
 
   function openNew() {
     setFormTarget('new')
     setDraftName('')
     setDraftPrompt('')
     setError(null)
+    initialDraftRef.current = { name: '', prompt: '' }
   }
 
   function openEdit(index: number) {
@@ -143,11 +157,28 @@ export function CommandsSection({
     setDraftName(cmd.name)
     setDraftPrompt(cmd.prompt)
     setError(null)
+    initialDraftRef.current = { name: cmd.name, prompt: cmd.prompt }
   }
 
   function closeForm() {
     setFormTarget(null)
     setError(null)
+  }
+
+  // True once the user has actually typed something different from what the
+  // dialog opened with — used to gate accidental-dismiss paths (overlay
+  // click / Esc) below, without blocking the explicit Cancel button.
+  const isDraftDirty =
+    draftName !== initialDraftRef.current.name ||
+    draftPrompt !== initialDraftRef.current.prompt
+
+  // Radix calls this for every close request (overlay click, Esc, Cancel's
+  // onOpenChange-less direct closeForm() call bypasses this entirely). When
+  // the dialog is asked to close and the draft is clean, treat it exactly
+  // like Cancel; when dirty, the onEscapeKeyDown/onInteractOutside guards
+  // below already prevented the request from reaching here.
+  function handleDialogOpenChange(open: boolean) {
+    if (!open) closeForm()
   }
 
   function saveDraft() {
@@ -295,17 +326,15 @@ export function CommandsSection({
             </h3>
             <div className="flex gap-2">
               <ButtonGroup>
-                {formTarget !== 'new' && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={openNew}
-                    aria-label="Add command"
-                    title="Add command"
-                  >
-                    Add command
-                  </Button>
-                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={openNew}
+                  aria-label="Add command"
+                  title="Add command"
+                >
+                  Add command
+                </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
@@ -343,79 +372,85 @@ export function CommandsSection({
             </div>
           </div>
 
-          {settings.commands.length === 0 && formTarget !== 'new' && (
+          {settings.commands.length === 0 && (
             <p className="text-sm text-muted-foreground">No commands yet.</p>
           )}
 
           <ul className="space-y-2">
             {settings.commands.map((cmd, index) => (
               <li key={index} className="rounded-lg border p-3">
-                {formTarget === index ? (
-                  <CommandFormFields
-                    name={draftName}
-                    prompt={draftPrompt}
-                    onNameChange={setDraftName}
-                    onPromptChange={setDraftPrompt}
-                    error={error}
-                    onSave={saveDraft}
-                    onCancel={closeForm}
-                  />
-                ) : (
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="truncate font-mono text-sm">
-                        {TRIGGER_PREFIX}
-                        {cmd.name}
-                      </div>
-                      <div className="truncate text-xs text-muted-foreground">
-                        {cmd.prompt}
-                      </div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate font-mono text-sm">
+                      {TRIGGER_PREFIX}
+                      {cmd.name}
                     </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <ShortcutInput
-                        className="hidden sm:block sm:w-36"
-                        value={settings.shortcuts[cmd.name]}
-                        onChange={(spec) => setShortcut(cmd.name, spec)}
-                        checkConflict={(spec) =>
-                          checkShortcutConflict(cmd.name, spec)
-                        }
-                      />
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEdit(index)}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeCommand(index)}
-                      >
-                        Delete
-                      </Button>
+                    <div className="truncate text-xs text-muted-foreground">
+                      {cmd.prompt}
                     </div>
                   </div>
-                )}
+                  <div className="flex shrink-0 items-center gap-2">
+                    <ShortcutInput
+                      className="hidden sm:block sm:w-36"
+                      value={settings.shortcuts[cmd.name]}
+                      onChange={(spec) => setShortcut(cmd.name, spec)}
+                      checkConflict={(spec) =>
+                        checkShortcutConflict(cmd.name, spec)
+                      }
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openEdit(index)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeCommand(index)}
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                </div>
               </li>
             ))}
           </ul>
-
-          {formTarget === 'new' && (
-            <div className="rounded-lg border p-3">
-              <CommandFormFields
-                name={draftName}
-                prompt={draftPrompt}
-                onNameChange={setDraftName}
-                onPromptChange={setDraftPrompt}
-                error={error}
-                onSave={saveDraft}
-                onCancel={closeForm}
-              />
-            </div>
-          )}
         </div>
       </CardContent>
+
+      <Dialog open={formTarget !== null} onOpenChange={handleDialogOpenChange}>
+        <DialogContent
+          showCloseButton={false}
+          onEscapeKeyDown={(e) => {
+            if (isDraftDirty) e.preventDefault()
+          }}
+          onInteractOutside={(e) => {
+            if (isDraftDirty) e.preventDefault()
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>
+              {formTarget === 'new' ? 'Add command' : 'Edit command'}
+            </DialogTitle>
+            <DialogDescription>
+              {formTarget === 'new'
+                ? 'Create a new command trigger and its prompt.'
+                : "Update this command's trigger name or prompt."}
+            </DialogDescription>
+          </DialogHeader>
+          <CommandFormFields
+            name={draftName}
+            prompt={draftPrompt}
+            onNameChange={setDraftName}
+            onPromptChange={setDraftPrompt}
+            error={error}
+            onSave={saveDraft}
+            onCancel={closeForm}
+          />
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }

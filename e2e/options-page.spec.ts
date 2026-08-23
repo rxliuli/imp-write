@@ -128,7 +128,7 @@ test.describe('options page - commands export/import', () => {
     await page.goto(`chrome-extension://${extensionId}/options.html`)
 
     // Fresh profile: commands are seeded from BUILTIN_COMMANDS (fix, improve,
-    // formal, tl) — none of those collide with the name below.
+    // shorten, tl) — none of those collide with the name below.
     const importFile = path.join(
       os.tmpdir(),
       `imp-write-import-${testInfo.workerIndex}-${Date.now()}.json`,
@@ -190,5 +190,104 @@ test.describe('options page - commands export/import', () => {
     expect(download.suggestedFilename()).toMatch(
       /^imp-write-commands-\d{4}-\d{2}-\d{2}\.json$/,
     )
+  })
+})
+
+// The Add/Edit command form used to render inline (appended to the list, or
+// swapped in for the row being edited) — it now opens in a modal Dialog
+// instead (see components/ui/dialog.tsx and CommandsSection.tsx). These
+// tests cover the primary open/fill/save flows plus the dirty-draft guard
+// that blocks an accidental overlay-click/Esc dismissal from silently
+// discarding unsaved edits.
+test.describe('options page - command dialog', () => {
+  test('Add command opens a dialog; saving closes it and adds the command', async ({
+    context,
+    extensionId,
+  }) => {
+    const page = await context.newPage()
+    await page.goto(`chrome-extension://${extensionId}/options.html`)
+
+    await page.getByRole('button', { name: 'Add command' }).click()
+
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByText('Add command')).toBeVisible()
+
+    await dialog.getByPlaceholder('e.g. concise').fill('brand-new-cmd')
+    await dialog
+      .getByPlaceholder(/Rewrite the text below/)
+      .fill('Do a new thing: {{text}}')
+    await dialog.getByRole('button', { name: 'Save' }).click()
+
+    await expect(dialog).toBeHidden()
+    await expect(page.getByText('/brand-new-cmd', { exact: true })).toBeVisible()
+  })
+
+  test('Edit opens a dialog prefilled with the existing command; saving closes it', async ({
+    context,
+    extensionId,
+  }) => {
+    const page = await context.newPage()
+    await page.goto(`chrome-extension://${extensionId}/options.html`)
+
+    // Fresh profile: BUILTIN_COMMANDS seeds "fix" as the first row.
+    await page.getByRole('button', { name: 'Edit' }).first().click()
+
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByText('Edit command')).toBeVisible()
+
+    const nameField = dialog.getByPlaceholder('e.g. concise')
+    await expect(nameField).toHaveValue('fix')
+    const promptField = dialog.getByPlaceholder(/Rewrite the text below/)
+    await expect(promptField).not.toHaveValue('')
+
+    await promptField.fill('Updated fix prompt: {{text}}')
+    await dialog.getByRole('button', { name: 'Save' }).click()
+
+    await expect(dialog).toBeHidden()
+    // Still there under its original name — only the prompt changed.
+    await expect(page.getByText('/fix', { exact: true })).toBeVisible()
+  })
+
+  test('a dirty draft blocks Esc and overlay-click from closing; Cancel and a clean draft still close', async ({
+    context,
+    extensionId,
+  }) => {
+    const page = await context.newPage()
+    await page.goto(`chrome-extension://${extensionId}/options.html`)
+
+    await page.getByRole('button', { name: 'Add command' }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+
+    const nameField = dialog.getByPlaceholder('e.g. concise')
+    await nameField.fill('temp-name')
+
+    // Dirty: Esc must not close the dialog.
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeVisible()
+
+    // Dirty: clicking the overlay (well outside the centered dialog card)
+    // must not close it either.
+    await page.mouse.click(5, 5)
+    await expect(dialog).toBeVisible()
+
+    // Cancel always works, dirty or not.
+    await dialog.getByRole('button', { name: 'Cancel' }).click()
+    await expect(dialog).toBeHidden()
+    await expect(
+      page.getByText('/temp-name', { exact: true }),
+    ).toHaveCount(0)
+
+    // Reopen and dirty it again, then clear back to the original (empty)
+    // value — once clean, Esc closes it like Cancel would.
+    await page.getByRole('button', { name: 'Add command' }).click()
+    await expect(dialog).toBeVisible()
+    await nameField.fill('temp-name-2')
+    await expect(dialog).toBeVisible()
+    await nameField.fill('')
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeHidden()
   })
 })

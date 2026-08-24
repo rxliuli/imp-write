@@ -21,7 +21,6 @@ import {
   type SelectionSnapshot,
 } from '@/lib/selection'
 import { DEFAULT_SETTINGS, getSettings, type Command, type Settings } from '@/lib/settings'
-import { gestureDebug, initGestureDebug } from '@/lib/gestureDebug'
 import {
   INITIAL_SPACE_GESTURE_STATE,
   reduceSpaceGesture,
@@ -476,10 +475,7 @@ export default defineContentScript({
       // toast, unlike the icon-tap path's "Focus a text field first" empty
       // state, since here the user *is* already focused and typing, just
       // with nothing worth running a command on yet.
-      if (!getEditSelection(element).getInputValue().trim()) {
-        gestureDebug('showCommandMenuForGesture: bail — empty/residue-only field')
-        return
-      }
+      if (!getEditSelection(element).getInputValue().trim()) return
 
       const [sorted, isMobile] = await Promise.all([
         getSortedCommands(settings.commands),
@@ -489,10 +485,7 @@ export default defineContentScript({
       // were in flight (rare, but the same defense-in-depth other
       // async-then-act paths in this file apply — see e.g. `onSelect`'s
       // `element.isConnected` check).
-      if (!element.isConnected) {
-        gestureDebug('showCommandMenuForGesture: bail — element disconnected')
-        return
-      }
+      if (!element.isConnected) return
 
       commandMenu.destroy()
       cancelEmptyStateToast()
@@ -509,9 +502,6 @@ export default defineContentScript({
       // autocorrect substitution can make the field's actual trailing
       // residue longer, or shaped differently, than 3 plain spaces).
       gestureMenuResidue = { residueLen, lastTime: gestureTime }
-      gestureDebug('showCommandMenuForGesture: showing menu', {
-        anchorMode: isMobile ? 'element' : 'caret',
-      })
       commandMenu.show(element, sorted, { anchorMode: isMobile ? 'element' : 'caret' })
     }
 
@@ -520,20 +510,10 @@ export default defineContentScript({
     // be mobile-only (see the `isSpaceGestureEnabled` history) but now fires
     // on every platform — desktop already has the idle-pause `/token`,
     // right-click, and shortcut triggers too, and the gesture is a fourth
-    // quick path. Wrapped in its own async setup function (rather than
-    // inline in `main`) purely so the listeners below are attached once,
-    // after platform info is resolved.
-    // below are ever attached at all* — on a disabled platform,
-    // `reduceSpaceGesture` is never even called, not just "called but
-    // ignored".
+    // quick path. The listeners below are attached unconditionally.
     async function setupSpaceGesture() {
-      const [isMobile] = await Promise.all([isMobilePlatform()])
       // The three-tap gesture is armed on every platform now (the
       // mobile-only gate is gone) — set up the listeners unconditionally.
-      gestureDebug('setupSpaceGesture: arming listeners', {
-        isMobile,
-        dev: import.meta.env.DEV,
-      })
 
       // `reduceSpaceGesture` (lib/spaceGestureDetector.ts) is a pure
       // function — this is its DOM wiring, kept inline (not its own class)
@@ -549,7 +529,6 @@ export default defineContentScript({
         'input',
         (e) => {
           if (!(e instanceof InputEvent)) {
-            gestureDebug('input: non-InputEvent (reset)')
             spaceGestureState = INITIAL_SPACE_GESTURE_STATE
             return
           }
@@ -558,15 +537,6 @@ export default defineContentScript({
           const now = Date.now()
           const result = reduceSpaceGesture(spaceGestureState, element, e, now)
           spaceGestureState = result.state
-          gestureDebug('input', {
-            data: e.data,
-            inputType: e.inputType,
-            isComposing: e.isComposing,
-            elementTag: element?.tagName ?? null,
-            fire: result.fire,
-            tapCount: result.state.tapCount,
-            residueLen: result.residueLen,
-          })
           if (result.fire && element) {
             void showCommandMenuForGesture(element, now, result.residueLen)
           }
@@ -604,10 +574,6 @@ export default defineContentScript({
         true,
       )
     }
-    // Content-script entry point — proving the script even injected is the
-    // first thing to check if a platform shows no gesture logs at all.
-    console.log('[imp-write] content script loaded on', location.href)
-    void initGestureDebug()
     void setupSpaceGesture()
 
     getSettings()

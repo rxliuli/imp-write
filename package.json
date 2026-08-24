@@ -2,7 +2,7 @@
   "name": "imp-write",
   "description": "AI fix & rewrite in any textbox — type /fix at the end and pause",
   "private": true,
-  "version": "0.0.3",
+  "version": "0.0.4",
   "type": "module",
   "scripts": {
     "dev": "wxt",

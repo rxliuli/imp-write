@@ -82,7 +82,7 @@ interface ProviderSettings {
 ## 5. 架构落点（WXT，骨架已就位）
 
 - `entrypoints/content/` — 主内容脚本（`<all_urls>`）：触发检测 + 文本读写 + loading 呈现。
-- `entrypoints/imp-connect.content.ts` — **窄匹配** `https://imp.rxliuli.com/connect/success*` 的独立内容脚本，只做一件事：读 meta 标签 → sendMessage（见 §6）。
+- `entrypoints/imp-connect.content.ts` — **窄匹配** `https://imp.rxliuli.com/api/connect/success*` 的独立内容脚本，只做一件事：读 meta 标签 → sendMessage（见 §6）。注意路径带 `/api/` 前缀（服务端挂在 `/api/connect` 下），`/connect/success` 并未被服务端渲染。
 - `entrypoints/background.ts` — AI 请求、多 key 切换、connect 兑换。
 - `lib/` — settings / commands / trigger（改造的 detector）/ ai-client，纯逻辑全部配 vitest 单测。
 - extport 集成（`extport.config.json` 已在骨架里）保持家族惯例即可。
@@ -90,9 +90,9 @@ interface ProviderSettings {
 ## 6. Imp Credits connect 契约（已定稿，服务端已实现并测试）
 
 1. 设置页「Connect」按钮 → `browser.tabs.create({ url: 'https://imp.rxliuli.com/connect?src=imp-write' })`。
-2. 用户在该页登录（邮箱 OTP）并点确认 → 服务端渲染 `/connect/success` 页面，一次性 code 只存在于 `<meta name="imp-connect-code" content="...">`（绝不在 URL）。
+2. 用户在该页登录（邮箱 OTP）并点确认 → 服务端渲染 `/api/connect/success` 页面，一次性 code 只存在于 `<meta name="imp-connect-code" content="...">`（绝不在 URL）。
 3. `imp-connect.content.ts`（窄匹配 success 页）读取 meta → `sendMessage` 给 background。
-4. background `POST https://imp.rxliuli.com/connect/exchange`，body `{code}`（code 即凭证，无需其他认证，5 分钟 TTL、单次使用）→ 返回 `{apiKey, baseUrl, model}` → 写入 settings（`mode: 'imp'`），通知 success 页标签可关闭。
+4. background `POST https://imp.rxliuli.com/api/connect/exchange`，body `{code}`（code 即凭证，无需其他认证，5 分钟 TTL、单次使用）→ 返回 `{apiKey, baseUrl, model}` → 写入 settings（`mode: 'imp'`），通知 success 页标签可关闭。
 5. 服务未部署期间：baseUrl 域名做成可配置常量，本地联调指向 wrangler dev 地址；imp-credits 的 `GET /auth/dev-login?subject=xxx`（仅 .dev.vars 开启时存在）可快速造测试账号。
 6. 计费相关错误透传：`402` = 余额不足（提示去 `https://imp.rxliuli.com/buy` 充值）、`429` = 限流（提示稍后再试）。
 

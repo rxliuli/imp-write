@@ -193,7 +193,7 @@ export default defineBackground(() => {
   messager.onMessage('impConnect', async (message) => {
     const code = message.data
     try {
-      const res = await fetch(`${IMP_ORIGIN}/connect/exchange`, {
+      const res = await fetch(`${IMP_ORIGIN}/api/connect/exchange`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code }),

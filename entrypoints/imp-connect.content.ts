@@ -1,13 +1,19 @@
 import { messager } from '@/lib/message'
 
-const PROD_MATCH = 'https://imp.rxliuli.com/connect/success*'
+// The Imp Credits Worker serves this success page at /api/connect/success
+// (the SPA's /connect page hard-navigates there via a real form POST), so
+// the content script must match that exact path — see
+// imp-credits/apps/api/src/routes/connect.ts's `route.post('/success')`.
+// Deliberately NOT /connect/success (no /api/ prefix): that path is never
+// served, so matching it would silently break the connect flow.
+const PROD_MATCH = 'https://imp.rxliuli.com/api/connect/success*'
 // Match patterns can't carry a port number (Chrome/Firefox reject the
 // pattern outright if one is present) — omitting the port matches the host
 // on any port, which is exactly what we want against `wrangler dev`'s
 // http://localhost:8787.
 const DEV_MATCHES = [
-  'http://localhost/connect/success*',
-  'http://127.0.0.1/connect/success*',
+  'http://localhost/api/connect/success*',
+  'http://127.0.0.1/api/connect/success*',
 ]
 
 export default defineContentScript({

@@ -500,10 +500,17 @@ export function shouldAbsorbGestureMenuInput(
  * `testOverride` exists solely so Playwright's e2e harness — which only
  * ever runs desktop Chromium, never a real mobile browser — can still
  * exercise this path end-to-end; see `lib/testHooks.ts`'s doc comment for
- * the full rationale. `isMobile || testOverride`: either one on its own is
- * sufficient, and the override never *disables* the gesture on an actually
- * mobile platform.
+ * the full rationale. `isMobile || testOverride ∥ import.meta.env.DEV`:
+ * any one on its own is sufficient, and neither the override nor DEV ever
+ * *disables* the gesture on an actually-mobile platform.
+ *
+ * The DEV arm is what lets a `wxt dev` build (where `import.meta.env.DEV`
+ * is `true`) summon the gesture on desktop too, so the mobile-only UI work
+ * (4-row command cap, header Settings gear) can be exercised in a desktop
+ * dev build without having to fake a platform. It's a no-op in a production
+ * build, where Vite replaces `import.meta.env.DEV` with `false` and the
+ * whole arm is dead-code-eliminated.
  */
 export function isSpaceGestureEnabled(isMobile: boolean, testOverride: boolean): boolean {
-  return isMobile || testOverride
+  return isMobile || testOverride || import.meta.env.DEV
 }

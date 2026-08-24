@@ -889,15 +889,20 @@ describe('isSpaceGestureEnabled', () => {
     expect(isSpaceGestureEnabled(true, true)).toBe(true)
   })
 
-  it('is disabled on a non-mobile platform by default (no test override)', () => {
-    expect(isSpaceGestureEnabled(false, false)).toBe(false)
+  // The harness runs with `import.meta.env.DEV === true`, which arms the
+  // gesture on desktop too — this is what lets a `wxt dev` build summon it
+  // on desktop for the mobile-only UI work. The *production*-desktop-disabled
+  // guarantee is asserted by the e2e "no test override" case, which runs
+  // against the prod build (`import.meta.env.DEV` replaced with `false`).
+  it('is enabled on a non-mobile platform in DEV', () => {
+    expect(isSpaceGestureEnabled(false, false)).toBe(true)
   })
 
   it('the test override alone is sufficient to enable it on a non-mobile platform', () => {
     expect(isSpaceGestureEnabled(false, true)).toBe(true)
   })
 
-  // The override can only ever turn the gesture *on* — it must never be
+  // The override/DEV can only ever turn the gesture *on* — neither must be
   // able to turn it *off* for an actually-mobile platform (there would be
   // no legitimate reason to, and a bug making it possible would be a
   // production behavior change hiding behind what's supposed to be an

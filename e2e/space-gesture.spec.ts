@@ -186,8 +186,10 @@ test('using a command moves it to the front the next time any command menu opens
   await ta.pressSequentially('   ', { delay: 20 })
 
   // Initial order matches BUILTIN_COMMANDS (settings order): fix first.
+  // Select the first *command* item, not the first <button> — the header
+  // Settings gear is now a button too and sits before the command list.
   const firstButtonText = () =>
-    page.locator(`${MENU_HOST} button`).first().textContent()
+    page.locator(`${MENU_HOST} .imp-write-menu-item`).first().textContent()
   await expect.poll(firstButtonText).toBe('/fix')
 
   // Pick the last command ("tl") instead of the first.

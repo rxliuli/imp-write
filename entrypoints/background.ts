@@ -16,6 +16,30 @@ const MENU_ITEM_PREFIX = 'imp-write-cmd:'
 // still-in-flight rebuild already added.
 let rebuildQueue: Promise<void> = Promise.resolve()
 
+// Cached across the service worker's lifetime — the platform doesn't change
+// mid-session, and `action.onClicked` needs this on every click.
+// `getPlatformInfo` is typed by `PlatformOs` (mac/win/android/cros/linux/
+// openbsd/fuchsia — no "ios" literal exists in that enum, since it's a
+// Chrome/Firefox API and neither ships a WebExtensions runtime on iOS
+// today), so `os` is read out as a plain `string` below rather than
+// compared while still narrowed to that union — a same-named future/other
+// browser value (e.g. a Safari Web Extension's "ios") should still be
+// caught by the `=== 'ios'` check instead of being a compile-time error for
+// "these types have no overlap".
+let platformInfoPromise: Promise<{ os: string }> | null = null
+
+function getPlatformInfo(): Promise<{ os: string }> {
+  platformInfoPromise ??= browser.runtime.getPlatformInfo().catch((err) => {
+    // Don't permanently cache a rejection — a transient failure shouldn't
+    // wedge every later click into treating the platform as unknown
+    // forever. Clear the cache so the next call retries; the current
+    // caller still observes this rejection normally.
+    platformInfoPromise = null
+    throw err
+  })
+  return platformInfoPromise
+}
+
 function doRebuildContextMenus(): Promise<void> {
   return getSettings().then(async (settings) => {
     await browser.contextMenus.removeAll()
@@ -50,8 +74,37 @@ function rebuildContextMenus(): Promise<void> {
 export default defineBackground(() => {
   console.log('Hello background!', { id: browser.runtime.id })
 
-  browser.action.onClicked.addListener(async () => {
-    await browser.runtime.openOptionsPage()
+  // Desktop keeps its original behavior: the toolbar icon just opens the
+  // options page (there's no popup UI configured in wxt.config.ts's
+  // manifest). On mobile (Firefox for Android is the only real target
+  // today — see wxt.config.ts's `gecko_android` — but this also covers any
+  // other Chromium-family Android browser that supports extensions), there
+  // *is* no toolbar "click" surface separate from an actual page tap, so
+  // this is effectively "the user wants to run a command on whatever
+  // they're focused in" — show the floating command menu injected by
+  // content.ts instead of a whole options-page navigation.
+  browser.action.onClicked.addListener(async (tab) => {
+    const platformInfo = await getPlatformInfo().catch(() => null)
+    const os = platformInfo?.os
+    const isMobile = os === 'android' || os === 'ios'
+    if (!isMobile || !tab?.id) {
+      await browser.runtime.openOptionsPage()
+      return
+    }
+    try {
+      // No `frameId` — broadcasts to every frame in the tab. Each frame
+      // decides for itself whether it has a fresh enough focus target to
+      // show a menu for; see content.ts's `showCommandMenu` handler and
+      // `lib/commandMenu.ts`'s module docstring for why this doesn't need a
+      // cross-frame coordinator.
+      await messager.sendMessage('showCommandMenu', undefined, { tabId: tab.id })
+    } catch {
+      // No content script is running in this tab (e.g. `about:`, the
+      // extension store, or a page that hasn't finished loading yet) —
+      // `tabs.sendMessage` rejects with "Could not establish connection."
+      // in that case. Fall back to the options page, same as desktop.
+      await browser.runtime.openOptionsPage()
+    }
   })
 
   // Build the right-click menu on install/update and on every browser
@@ -89,6 +142,13 @@ export default defineBackground(() => {
       tabId: tab.id,
       frameId: info.frameId,
     })
+  })
+
+  // The floating command menu's "Settings" entry (see lib/commandMenu.ts) —
+  // `browser.runtime.openOptionsPage()` isn't callable from a content
+  // script's context, so it routes the request through here instead.
+  messager.onMessage('openOptionsPage', async () => {
+    await browser.runtime.openOptionsPage()
   })
 
   // AI requests run here (not in the content script) so keys never enter the

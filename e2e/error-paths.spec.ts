@@ -31,7 +31,7 @@ test('imp mode: 402 shows an insufficient-credits hint and leaves the input unto
   await ta.pressSequentially(original, { delay: 20 })
 
   await expect(
-    page.getByText('Insufficient credits — top up at https://imp.rxliuli.com/buy', {
+    page.getByText('Insufficient credits — top up on the Imp website', {
       exact: true,
     }),
   ).toBeVisible({ timeout: 5000 })

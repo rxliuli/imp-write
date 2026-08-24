@@ -178,10 +178,11 @@ describe('runPrompt (imp mode)', () => {
 })
 
 describe('humanizeError', () => {
-  it('imp mode: 402 points at the top-up page', () => {
-    expect(humanizeError(new ApiError('x', 402), 'imp')).toContain(
-      'https://imp.rxliuli.com/buy',
+  it('imp mode: 402 is a plain message with no external link', () => {
+    expect(humanizeError(new ApiError('x', 402), 'imp')).toBe(
+      'Insufficient credits — top up on the Imp website',
     )
+    expect(humanizeError(new ApiError('x', 402), 'imp')).not.toContain('http')
   })
 
   it('imp mode: 429 is a rate-limit message', () => {

@@ -99,7 +99,10 @@ export function humanizeError(error: unknown, mode: ProviderSettings['mode']): s
   if (error instanceof ApiError) {
     if (mode === 'imp') {
       if (error.status === 402) {
-        return 'Insufficient credits — top up at https://imp.rxliuli.com/buy'
+        // No external purchase link here: pointing users at an off-app
+        // top-up page violates App Store guideline 3.1.1 (anti-steering).
+        // Keep it as plain text only — the purchase flow lives off-app.
+        return 'Insufficient credits — top up on the Imp website'
       }
       if (error.status === 429) return 'Rate limited — try again in a moment'
       if (error.status === 401) {

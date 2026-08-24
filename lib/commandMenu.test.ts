@@ -318,7 +318,9 @@ describe('CommandMenu', () => {
     // the header, so the command list is full-width and the menu stays short.
     const settings = getSettingsButton()
     expect(settings).not.toBeNull()
-    expect(settings!.textContent).toBe('⚙')
+    // The gear is an inlined SVG (not a text glyph), so assert on the SVG
+    // node and the accessible label rather than textContent.
+    expect(settings!.querySelector('svg')).not.toBeNull()
     expect(settings!.getAttribute('aria-label')).toBe('Settings')
     // "touch friendly: row height >= 44px" — computed from the CSS rule
     // rather than asserted against the stylesheet text, so this actually
@@ -333,7 +335,7 @@ describe('CommandMenu', () => {
     const host = getMenuHost()!
     expect(host.shadowRoot!.textContent).toContain('No commands configured yet.')
     expect(getCommandButtons()).toHaveLength(0)
-    expect(getSettingsButton()?.textContent).toBe('⚙')
+    expect(getSettingsButton()?.ariaLabel).toBe('Settings')
   })
 
   it('tapping a command closes the menu and invokes onSelect with the target element and that command', () => {

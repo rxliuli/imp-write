@@ -167,6 +167,12 @@ const MENU_Z_INDEX = 2147483647
 const MAX_VISIBLE_COMMANDS = 4
 const MENU_ROW_HEIGHT = 44
 
+// Lucide `settings` gear, inlined as SVG (not the `⚙` text glyph) so it
+// renders crisply and consistently across platforms and inherits the button's
+// `color` via `currentColor` — a text glyph would inherit `.imp-write-menu-title`'s
+// 12px font-size and come out too small (as observed on desktop).
+const SETTINGS_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>`
+
 // Colors are CSS custom properties (light values as the default, overridden
 // under `@media (prefers-color-scheme: dark)`) rather than a shadcn/Tailwind
 // token system — this stylesheet is injected standalone into an isolated
@@ -256,6 +262,11 @@ const MENU_STYLES = `
   .imp-write-menu-gear:active {
     background: var(--imp-menu-hover-bg);
     color: var(--imp-menu-fg);
+  }
+  .imp-write-menu-gear svg {
+    display: block;
+    width: 18px;
+    height: 18px;
   }
   /* The scrollable command list. min-height: 0 overrides flexbox's default
      min-height: auto, which would otherwise keep this item at its content
@@ -507,7 +518,7 @@ export class CommandMenu {
     const settings = document.createElement('button')
     settings.type = 'button'
     settings.className = 'imp-write-menu-gear'
-    settings.textContent = '⚙'
+    settings.innerHTML = SETTINGS_ICON_SVG
     settings.setAttribute('aria-label', 'Settings')
     settings.title = 'Settings'
     settings.addEventListener('click', () => {

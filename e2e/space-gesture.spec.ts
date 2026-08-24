@@ -14,8 +14,9 @@ const MENU_HOST = '#imp-write-command-menu-host'
 const FIX_BUTTON = `${MENU_HOST} button:text-is("/fix")`
 const MENU_LIST = `${MENU_HOST} .imp-write-menu-list`
 // Settings is now a gear icon in the menu header (no longer a full-width
-// footer row) — see `lib/commandMenu.ts`'s `buildMenuElement`.
-const SETTINGS_BUTTON = `${MENU_HOST} button:text-is("⚙")`
+// footer row) — an inlined SVG button keyed by its aria-label, since the
+// SVG carries no text content. See `lib/commandMenu.ts`'s `buildMenuElement`.
+const SETTINGS_BUTTON = `${MENU_HOST} button[aria-label="Settings"]`
 
 test('three real spaces at the end of a field summons the command menu', async ({
   context,

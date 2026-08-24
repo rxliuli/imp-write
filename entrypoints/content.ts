@@ -21,6 +21,7 @@ import {
   type SelectionSnapshot,
 } from '@/lib/selection'
 import { DEFAULT_SETTINGS, getSettings, type Command, type Settings } from '@/lib/settings'
+import { gestureDebug, initGestureDebug } from '@/lib/gestureDebug'
 import {
   INITIAL_SPACE_GESTURE_STATE,
   isSpaceGestureEnabled,
@@ -477,7 +478,10 @@ export default defineContentScript({
       // toast, unlike the icon-tap path's "Focus a text field first" empty
       // state, since here the user *is* already focused and typing, just
       // with nothing worth running a command on yet.
-      if (!getEditSelection(element).getInputValue().trim()) return
+      if (!getEditSelection(element).getInputValue().trim()) {
+        gestureDebug('showCommandMenuForGesture: bail — empty/residue-only field')
+        return
+      }
 
       const [sorted, isMobile] = await Promise.all([
         getSortedCommands(settings.commands),
@@ -487,7 +491,10 @@ export default defineContentScript({
       // were in flight (rare, but the same defense-in-depth other
       // async-then-act paths in this file apply — see e.g. `onSelect`'s
       // `element.isConnected` check).
-      if (!element.isConnected) return
+      if (!element.isConnected) {
+        gestureDebug('showCommandMenuForGesture: bail — element disconnected')
+        return
+      }
 
       commandMenu.destroy()
       cancelEmptyStateToast()
@@ -504,6 +511,9 @@ export default defineContentScript({
       // autocorrect substitution can make the field's actual trailing
       // residue longer, or shaped differently, than 3 plain spaces).
       gestureMenuResidue = { residueLen, lastTime: gestureTime }
+      gestureDebug('showCommandMenuForGesture: showing menu', {
+        anchorMode: isMobile ? 'element' : 'caret',
+      })
       commandMenu.show(element, sorted, { anchorMode: isMobile ? 'element' : 'caret' })
     }
 
@@ -524,6 +534,12 @@ export default defineContentScript({
         isMobilePlatform(),
         getSpaceGestureTestOverride(),
       ])
+      gestureDebug('setupSpaceGesture gate', {
+        isMobile,
+        testOverride,
+        dev: import.meta.env.DEV,
+        enabled: isSpaceGestureEnabled(isMobile, testOverride),
+      })
       if (!isSpaceGestureEnabled(isMobile, testOverride)) return
 
       // `reduceSpaceGesture` (lib/spaceGestureDetector.ts) is a pure
@@ -548,6 +564,15 @@ export default defineContentScript({
           const now = Date.now()
           const result = reduceSpaceGesture(spaceGestureState, element, e, now)
           spaceGestureState = result.state
+          gestureDebug('input', {
+            data: e.data,
+            inputType: e.inputType,
+            isComposing: e.isComposing,
+            elementTag: element?.tagName ?? null,
+            fire: result.fire,
+            tapCount: result.state.tapCount,
+            residueLen: result.residueLen,
+          })
           if (result.fire && element) {
             void showCommandMenuForGesture(element, now, result.residueLen)
           }
@@ -585,6 +610,7 @@ export default defineContentScript({
         true,
       )
     }
+    void initGestureDebug()
     void setupSpaceGesture()
 
     getSettings()

@@ -24,9 +24,8 @@ import { DEFAULT_SETTINGS, getSettings, type Command, type Settings } from '@/li
 import {
   INITIAL_SPACE_GESTURE_STATE,
   reduceSpaceGesture,
-  SPACE_GESTURE_TARGET_COUNT,
   shouldAbsorbGestureMenuInput,
-  stripTrailingGestureSpaces,
+  stripTrailingGestureResidue,
   type GestureMenuResidueState,
   type SpaceGestureState,
 } from '@/lib/spaceGestureDetector'
@@ -136,9 +135,9 @@ export default defineContentScript({
     // before that `commandMenu.show()` call, cleared (`null`) right before
     // the icon-tap path's own `show()` call, and consumed by `onSelect`
     // below (read once, then reset) to decide both *whether* the field's
-    // trailing gesture spaces need stripping before this command's text
-    // goes to the AI, and *how many* to strip — see
-    // `lib/spaceGestureDetector.ts`'s `stripTrailingGestureSpaces` doc
+    // trailing gesture residue needs stripping before this command's text
+    // goes to the AI, and *how many characters* to strip — see
+    // `lib/spaceGestureDetector.ts`'s `stripTrailingGestureResidue` doc
     // comment. Also read (and updated in place) by `onTargetInput` below,
     // every time the target gets new input while this menu is open, to
     // decide whether a same-rhythm extra space tap should be absorbed
@@ -181,11 +180,14 @@ export default defineContentScript({
         }
 
         // Gesture path: the field still literally contains the trailing
-        // spaces that summoned this menu, plus one more for every
-        // same-rhythm extra tap `onTargetInput` absorbed instead of
-        // closing the menu (showing/keeping the menu open never touches
-        // the text — only picking a command does). Strip exactly that
-        // many from what's sent to the AI, the same way `triggerCommand`'s
+        // residue that summoned this menu (a run of plain spaces, or —
+        // see `lib/spaceGestureDetector.ts`'s module docstring — a
+        // platform's own "double-space → period" autocorrect substitution
+        // folded in), plus one more character for every same-rhythm extra
+        // tap `onTargetInput` absorbed instead of closing the menu
+        // (showing/keeping the menu open never touches the text — only
+        // picking a command does). Strip exactly that many characters from
+        // what's sent to the AI, the same way `triggerCommand`'s
         // `parseCommandTrigger` consumes a `/token` rather than sending it
         // along too. Always whole-field scope — typing the gesture's
         // spaces necessarily collapses/replaces any prior selection, so
@@ -193,7 +195,7 @@ export default defineContentScript({
         // time the menu is showing (mirrors `triggerCommand`, which is the
         // same "collapsed-caret, no selection" situation).
         const selection = getEditSelection(element)
-        const text = stripTrailingGestureSpaces(selection.getInputValue(), residue.count)
+        const text = stripTrailingGestureResidue(selection.getInputValue(), residue.residueLen)
         if (!text.trim()) {
           showHint(element, 'Nothing to run this command on')
           return
@@ -458,15 +460,21 @@ export default defineContentScript({
      * (unlike the icon tap, mobile-only by construction), so it has to
      * decide the anchor mode itself rather than trusting the caller.
      */
-    async function showCommandMenuForGesture(element: HTMLElement, gestureTime: number) {
+    async function showCommandMenuForGesture(
+      element: HTMLElement,
+      gestureTime: number,
+      residueLen: number,
+    ) {
       // Trigger precondition: the field must have some non-whitespace
       // content — the same empty-text guard `executeOnEditTarget` already
       // applies before running a command (`!text.trim()`). A field holding
-      // only the three gesture spaces themselves (`"   ".trim() === ''`)
-      // fails this, and the menu simply isn't summoned — no toast, unlike
-      // the icon-tap path's "Focus a text field first" empty state, since
-      // here the user *is* already focused and typing, just with nothing
-      // worth running a command on yet.
+      // only the gesture's own residue (`"   ".trim() === ''`, and the
+      // same holds for a `.`/`。`-only residue from an R1/R2/R3 autocorrect
+      // substitution — see `lib/spaceGestureDetector.ts`'s module
+      // docstring) fails this, and the menu simply isn't summoned — no
+      // toast, unlike the icon-tap path's "Focus a text field first" empty
+      // state, since here the user *is* already focused and typing, just
+      // with nothing worth running a command on yet.
       if (!getEditSelection(element).getInputValue().trim()) return
 
       const [sorted, isMobile] = await Promise.all([
@@ -483,14 +491,17 @@ export default defineContentScript({
       cancelEmptyStateToast()
       hideNoTargetToast()
       // Seeds the "same-rhythm extra tap" absorption window (see
-      // `onTargetInput` above) from `gestureTime` — the timestamp of the
-      // actual 3rd space keystroke that completed the gesture, captured
-      // synchronously in the `input` listener below, not a later timestamp
-      // taken after the awaits above. Using a later time here would make
-      // the window measurably (if only slightly) more lenient than the
-      // gesture's own rhythm requirement — this keeps both windows
-      // measured from the same real keystroke.
-      gestureMenuResidue = { count: SPACE_GESTURE_TARGET_COUNT, lastTime: gestureTime }
+      // `onTargetInput` above) from `gestureTime` (the actual 3rd
+      // keystroke's own timestamp, captured synchronously in the `input`
+      // listener below, not a later timestamp taken after the awaits
+      // above — using a later time here would make the window measurably,
+      // if only slightly, more lenient than the gesture's own rhythm
+      // requirement) and `residueLen` (`reduceSpaceGesture`'s own
+      // `SpaceGestureMatch.residueLen` — see its doc comment for why that,
+      // not `SPACE_GESTURE_TARGET_COUNT`, is the correct seed: an R1/R2/R3
+      // autocorrect substitution can make the field's actual trailing
+      // residue longer, or shaped differently, than 3 plain spaces).
+      gestureMenuResidue = { residueLen, lastTime: gestureTime }
       commandMenu.show(element, sorted, { anchorMode: isMobile ? 'element' : 'caret' })
     }
 
@@ -519,7 +530,7 @@ export default defineContentScript({
         const result = reduceSpaceGesture(spaceGestureState, element, e, now)
         spaceGestureState = result.state
         if (result.fire && element) {
-          void showCommandMenuForGesture(element, now)
+          void showCommandMenuForGesture(element, now, result.residueLen)
         }
       },
       true,

@@ -2,11 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   INITIAL_SPACE_GESTURE_STATE,
   reduceSpaceGesture,
+  SAME_TAP_WINDOW_MS,
   shouldAbsorbGestureMenuInput,
   SPACE_GESTURE_MAX_GAP_MS,
   SPACE_GESTURE_TARGET_COUNT,
-  stripTrailingGestureSpaces,
+  stripTrailingGestureResidue,
   type GestureMenuResidueState,
+  type SpaceGestureInputEvent,
   type SpaceGestureState,
 } from './spaceGestureDetector'
 
@@ -38,6 +40,19 @@ function spaceInputEvent(overrides: Partial<InputEventInit> = {}): InputEvent {
   })
 }
 
+/** A real `insertReplacementText` `InputEvent` carrying `text` in `dataTransfer['text/plain']` — matches iOS's shape for a "double-space → period" autocorrect substitution (its own `data` is always `null`). */
+function replacementInputEvent(text: string): InputEvent {
+  const dataTransfer = new DataTransfer()
+  dataTransfer.setData('text/plain', text)
+  return new InputEvent('input', {
+    inputType: 'insertReplacementText',
+    data: null,
+    dataTransfer,
+    bubbles: true,
+    cancelable: true,
+  })
+}
+
 describe('reduceSpaceGesture', () => {
   it('does not fire on the first or second space keystroke, fires on the third', () => {
     let state = INITIAL_SPACE_GESTURE_STATE
@@ -45,16 +60,19 @@ describe('reduceSpaceGesture', () => {
 
     let result = reduceSpaceGesture(state, input, spaceInputEvent(), now)
     expect(result.fire).toBe(false)
-    expect(result.state.count).toBe(1)
+    expect(result.state.tapCount).toBe(1)
+    expect(result.state.residueLen).toBe(1)
     state = result.state
 
     result = reduceSpaceGesture(state, input, spaceInputEvent(), now + 50)
     expect(result.fire).toBe(false)
-    expect(result.state.count).toBe(2)
+    expect(result.state.tapCount).toBe(2)
+    expect(result.state.residueLen).toBe(2)
     state = result.state
 
     result = reduceSpaceGesture(state, input, spaceInputEvent(), now + 100)
     expect(result.fire).toBe(true)
+    expect(result.residueLen).toBe(3)
     // Reset back to a fresh run once fired, so the caller never needs to
     // reset anything itself.
     expect(result.state).toEqual(INITIAL_SPACE_GESTURE_STATE)
@@ -68,7 +86,8 @@ describe('reduceSpaceGesture', () => {
     }
     const fourth = reduceSpaceGesture(state, input, spaceInputEvent(), now + 1000)
     expect(fourth.fire).toBe(false)
-    expect(fourth.state.count).toBe(1)
+    expect(fourth.state.tapCount).toBe(1)
+    expect(fourth.state.residueLen).toBe(1)
   })
 
   it('resets the run when a non-space character is typed in between', () => {
@@ -76,7 +95,7 @@ describe('reduceSpaceGesture', () => {
     const now = 1_000
     state = reduceSpaceGesture(state, input, spaceInputEvent(), now).state
     state = reduceSpaceGesture(state, input, spaceInputEvent(), now + 10).state
-    expect(state.count).toBe(2)
+    expect(state.tapCount).toBe(2)
 
     state = reduceSpaceGesture(
       state,
@@ -88,22 +107,36 @@ describe('reduceSpaceGesture', () => {
 
     const result = reduceSpaceGesture(state, input, spaceInputEvent(), now + 30)
     expect(result.fire).toBe(false)
-    expect(result.state.count).toBe(1)
+    expect(result.state.tapCount).toBe(1)
   })
 
-  it('resets on a deletion (deleteContentBackward)', () => {
+  it('resets on a deletion (deleteContentBackward) mid-run', () => {
     let state = INITIAL_SPACE_GESTURE_STATE
     state = reduceSpaceGesture(state, input, spaceInputEvent(), 1_000).state
     state = reduceSpaceGesture(state, input, spaceInputEvent(), 1_010).state
-    expect(state.count).toBe(2)
+    expect(state.tapCount).toBe(2)
 
-    state = reduceSpaceGesture(
+    const result = reduceSpaceGesture(
       state,
       input,
       spaceInputEvent({ inputType: 'deleteContentBackward', data: null }),
       1_020,
-    ).state
-    expect(state).toEqual(INITIAL_SPACE_GESTURE_STATE)
+    )
+    expect(result.fire).toBe(false)
+    // Not reset yet — this exact deletion is *also* a valid R3 first-half
+    // candidate (see the R3 describe block below); a real backspace and
+    // R3's opening delete are indistinguishable until the following event
+    // resolves it, so it enters `pendingDelete` here rather than disarming
+    // outright.
+    expect(result.state.pendingDelete).toBe(true)
+    // The follow-up below (10ms later, still well within
+    // SAME_TAP_WINDOW_MS) *does* disarm — but because of its *content*
+    // (`data: 'k'`, not a period-like character), not its timing: a
+    // pendingDelete only ever resolves into R3 on a matching period
+    // `insertText`; anything else — even comfortably inside the window —
+    // means the delete really was a genuine, unrelated backspace.
+    const after = reduceSpaceGesture(result.state, input, spaceInputEvent({ data: 'k' }), 1_030)
+    expect(after.state).toEqual(INITIAL_SPACE_GESTURE_STATE)
   })
 
   it('resets on native undo (historyUndo)', () => {
@@ -157,7 +190,7 @@ describe('reduceSpaceGesture', () => {
   it('resets once the gap between two space keystrokes exceeds SPACE_GESTURE_MAX_GAP_MS', () => {
     let state = INITIAL_SPACE_GESTURE_STATE
     state = reduceSpaceGesture(state, input, spaceInputEvent(), 1_000).state
-    expect(state.count).toBe(1)
+    expect(state.tapCount).toBe(1)
 
     const result = reduceSpaceGesture(
       state,
@@ -167,27 +200,27 @@ describe('reduceSpaceGesture', () => {
     )
     // Too slow to be "the same run" — starts a fresh run at count 1, not 2.
     expect(result.fire).toBe(false)
-    expect(result.state.count).toBe(1)
+    expect(result.state.tapCount).toBe(1)
   })
 
   it('resets when the focused element changes mid-run', () => {
     let state = INITIAL_SPACE_GESTURE_STATE
     state = reduceSpaceGesture(state, input, spaceInputEvent(), 1_000).state
     state = reduceSpaceGesture(state, input, spaceInputEvent(), 1_010).state
-    expect(state.count).toBe(2)
+    expect(state.tapCount).toBe(2)
 
     // The 3rd space lands in a different element — starts fresh there,
     // it does not inherit `input`'s count.
     const result = reduceSpaceGesture(state, other, spaceInputEvent(), 1_020)
     expect(result.fire).toBe(false)
-    expect(result.state.count).toBe(1)
+    expect(result.state.tapCount).toBe(1)
     expect(result.state.element).toBe(other)
   })
 
   it('resets when there is no qualifying active element', () => {
     let state = INITIAL_SPACE_GESTURE_STATE
     state = reduceSpaceGesture(state, input, spaceInputEvent(), 1_000).state
-    expect(state.count).toBe(1)
+    expect(state.tapCount).toBe(1)
 
     const result = reduceSpaceGesture(state, null, spaceInputEvent(), 1_010)
     expect(result.fire).toBe(false)
@@ -201,7 +234,7 @@ describe('reduceSpaceGesture', () => {
   it('leaves an in-progress run untouched on a composing event, rather than resetting it', () => {
     let state = INITIAL_SPACE_GESTURE_STATE
     state = reduceSpaceGesture(state, input, spaceInputEvent(), 1_000).state
-    expect(state.count).toBe(1)
+    expect(state.tapCount).toBe(1)
 
     const composing = reduceSpaceGesture(
       state,
@@ -214,7 +247,7 @@ describe('reduceSpaceGesture', () => {
 
     // The run can still complete normally afterwards.
     const second = reduceSpaceGesture(composing.state, input, spaceInputEvent(), 1_020)
-    expect(second.state.count).toBe(2)
+    expect(second.state.tapCount).toBe(2)
     const third = reduceSpaceGesture(second.state, input, spaceInputEvent(), 1_030)
     expect(third.fire).toBe(true)
   })
@@ -239,6 +272,336 @@ describe('reduceSpaceGesture', () => {
     )
     expect(result.fire).toBe(false)
     expect(result.state).toEqual(INITIAL_SPACE_GESTURE_STATE)
+  })
+})
+
+// R1: macOS's own "double-space → period" autocorrect, observed on-device
+// as a single `insertText` event replacing the previous trailing space —
+// `data === ". "` in an English input-locale, `data === "。"` (no trailing
+// space baked in) in a Chinese/Japanese/Korean one. See the module
+// docstring for the full trace-derived writeup.
+describe('reduceSpaceGesture — R1 (macOS autocorrect)', () => {
+  it('English: ". " counts as one tap, replacing the prior space with a 2-char residue', () => {
+    let state = reduceSpaceGesture(INITIAL_SPACE_GESTURE_STATE, input, spaceInputEvent(), 1_000).state
+    expect(state).toMatchObject({ tapCount: 1, residueLen: 1 })
+
+    const result = reduceSpaceGesture(state, input, spaceInputEvent({ data: '. ' }), 1_170)
+    expect(result.fire).toBe(false)
+    expect(result.state.tapCount).toBe(2)
+    expect(result.state.residueLen).toBe(2) // 1 - 1 + ". ".length
+
+    const third = reduceSpaceGesture(result.state, input, spaceInputEvent(), 1_320)
+    expect(third.fire).toBe(true)
+    expect(third.residueLen).toBe(3)
+  })
+
+  it('Chinese: "。" counts as one tap, replacing the prior space with a 1-char residue', () => {
+    let state = reduceSpaceGesture(INITIAL_SPACE_GESTURE_STATE, input, spaceInputEvent(), 1_000).state
+    const result = reduceSpaceGesture(state, input, spaceInputEvent({ data: '。' }), 1_167)
+    expect(result.fire).toBe(false)
+    expect(result.state.tapCount).toBe(2)
+    expect(result.state.residueLen).toBe(1) // 1 - 1 + "。".length
+
+    const third = reduceSpaceGesture(result.state, input, spaceInputEvent(), 1_306)
+    expect(third.fire).toBe(true)
+    expect(third.residueLen).toBe(2)
+  })
+
+  // Decision point #5: a lone period the user typed on purpose (nothing
+  // armed yet) must never be mistaken for the gesture.
+  it('does not start counting when tapCount is 0 (a real, deliberate period)', () => {
+    const result = reduceSpaceGesture(INITIAL_SPACE_GESTURE_STATE, input, spaceInputEvent({ data: '. ' }), 1_000)
+    expect(result.fire).toBe(false)
+    expect(result.state).toEqual(INITIAL_SPACE_GESTURE_STATE)
+  })
+
+  it('does not apply once the rhythm window (600ms) has elapsed since the last tap', () => {
+    const armed = reduceSpaceGesture(INITIAL_SPACE_GESTURE_STATE, input, spaceInputEvent(), 1_000).state
+    const result = reduceSpaceGesture(
+      armed,
+      input,
+      spaceInputEvent({ data: '. ' }),
+      1_000 + SPACE_GESTURE_MAX_GAP_MS + 1,
+    )
+    // Falls through to the ordinary rules: ". " isn't a plain space, so it
+    // disarms outright rather than being treated as R1.
+    expect(result.fire).toBe(false)
+    expect(result.state).toEqual(INITIAL_SPACE_GESTURE_STATE)
+  })
+})
+
+// R2: iOS's English-locale "double-space → period" autocorrect — an
+// `insertReplacementText` event (its own `data` is always `null`; the
+// actual text lives in `dataTransfer`) immediately followed by a *separate*
+// `insertText`/`data === ' '` event for the same physical tap.
+describe('reduceSpaceGesture — R2 (iOS English autocorrect)', () => {
+  it('the replacement alone counts as one tap; the immediately-following space extends residue without a second tap', () => {
+    let state = reduceSpaceGesture(INITIAL_SPACE_GESTURE_STATE, input, spaceInputEvent(), 1_000).state
+    expect(state).toMatchObject({ tapCount: 1, residueLen: 1 })
+
+    const replaced = reduceSpaceGesture(state, input, replacementInputEvent('.'), 1_168)
+    expect(replaced.fire).toBe(false)
+    expect(replaced.state.tapCount).toBe(2)
+    expect(replaced.state.residueLen).toBe(1) // 1 - 1 + ".".length
+    expect(replaced.state.justSubstitutedAt).toBe(1_168)
+
+    // The attached space, well within SAME_TAP_WINDOW_MS of the replacement.
+    const attached = reduceSpaceGesture(replaced.state, input, spaceInputEvent(), 1_168 + 11)
+    expect(attached.fire).toBe(false)
+    // tapCount unchanged — this space is the *same* physical keystroke as
+    // the replacement, not a new one (otherwise two iOS taps alone would
+    // reach the threshold of three).
+    expect(attached.state.tapCount).toBe(2)
+    expect(attached.state.residueLen).toBe(2)
+    expect(attached.state.justSubstitutedAt).toBeNull()
+
+    const third = reduceSpaceGesture(attached.state, input, spaceInputEvent(), 1_317)
+    expect(third.fire).toBe(true)
+    expect(third.residueLen).toBe(3)
+  })
+
+  it('does not start counting when tapCount is 0', () => {
+    const result = reduceSpaceGesture(INITIAL_SPACE_GESTURE_STATE, input, replacementInputEvent('.'), 1_000)
+    expect(result.fire).toBe(false)
+    expect(result.state).toEqual(INITIAL_SPACE_GESTURE_STATE)
+  })
+
+  it('a replacement text other than a lone period is not treated as R1/R2 at all', () => {
+    const armed = reduceSpaceGesture(INITIAL_SPACE_GESTURE_STATE, input, spaceInputEvent(), 1_000).state
+    const result = reduceSpaceGesture(armed, input, replacementInputEvent('teh->the'), 1_100)
+    // Falls through to the ordinary rules — an unrecognized
+    // `insertReplacementText` (e.g. spell-check) disarms, same as any other
+    // non-qualifying input.
+    expect(result.fire).toBe(false)
+    expect(result.state).toEqual(INITIAL_SPACE_GESTURE_STATE)
+  })
+
+  // A non-space character arriving *within* SAME_TAP_WINDOW_MS of the
+  // replacement (e.g. the user kept typing normal text right after the
+  // autocorrect fired, rather than the expected attached space) is not the
+  // R2 companion event — `justSubstitutedAt` only ever matches a plain
+  // space. It's cleared and this event falls through to the ordinary
+  // rules, which disarm on any non-qualifying insertText.
+  it('a non-space character within SAME_TAP_WINDOW_MS of the replacement clears justSubstitutedAt and resets as ordinary input', () => {
+    const armed = reduceSpaceGesture(INITIAL_SPACE_GESTURE_STATE, input, spaceInputEvent(), 1_000).state
+    const replaced = reduceSpaceGesture(armed, input, replacementInputEvent('.'), 1_168).state
+    expect(replaced.justSubstitutedAt).toBe(1_168)
+
+    const result = reduceSpaceGesture(
+      replaced,
+      input,
+      spaceInputEvent({ data: 'k' }),
+      1_168 + 10, // well within SAME_TAP_WINDOW_MS
+    )
+    expect(result.fire).toBe(false)
+    expect(result.state).toEqual(INITIAL_SPACE_GESTURE_STATE)
+  })
+
+  // Decision point #3 in the task write-up: a space outside
+  // SAME_TAP_WINDOW_MS of the replacement is a *separate*, ordinary tap —
+  // not "the same keystroke" — so it *does* advance tapCount normally
+  // (rather than being coalesced into the replacement like the "attached"
+  // case above). Concretely, that means it can itself complete the
+  // gesture — tapCount was already 2 after the replacement, so this one
+  // ordinary tap reaches the threshold of 3, the same as the macOS shape
+  // (which never has a separate attached-space event at all) does from the
+  // same tapCount.
+  it('a space arriving after SAME_TAP_WINDOW_MS (but still within the rhythm window) counts as an ordinary new tap, not an attached one', () => {
+    const armed = reduceSpaceGesture(INITIAL_SPACE_GESTURE_STATE, input, spaceInputEvent(), 1_000).state
+    const replaced = reduceSpaceGesture(armed, input, replacementInputEvent('.'), 1_168).state
+    expect(replaced.tapCount).toBe(2)
+
+    const late = reduceSpaceGesture(
+      replaced,
+      input,
+      spaceInputEvent(),
+      1_168 + SAME_TAP_WINDOW_MS + 1,
+    )
+    expect(late.fire).toBe(true)
+    expect(late.residueLen).toBe(2) // (1 - 1 + 1) + 1
+  })
+})
+
+// R3: iOS's Chinese/Japanese/Korean-locale "double-space → period"
+// autocorrect — a `deleteContentBackward` (removing the old trailing
+// space) immediately followed by a *separate* `insertText`/period event,
+// both for the same physical tap.
+describe('reduceSpaceGesture — R3 (iOS Chinese/Japanese/Korean autocorrect)', () => {
+  it('delete + immediately-following period together count as one tap', () => {
+    let state = reduceSpaceGesture(INITIAL_SPACE_GESTURE_STATE, input, spaceInputEvent(), 1_000).state
+    expect(state).toMatchObject({ tapCount: 1, residueLen: 1 })
+
+    const deleted = reduceSpaceGesture(
+      state,
+      input,
+      spaceInputEvent({ inputType: 'deleteContentBackward', data: null }),
+      1_158,
+    )
+    expect(deleted.fire).toBe(false)
+    expect(deleted.state.tapCount).toBe(1) // unchanged — not yet counted
+    expect(deleted.state.residueLen).toBe(0) // 1 - 1
+    expect(deleted.state.pendingDelete).toBe(true)
+
+    const period = reduceSpaceGesture(
+      deleted.state,
+      input,
+      spaceInputEvent({ data: '。' }),
+      1_158 + 15,
+    )
+    expect(period.fire).toBe(false)
+    expect(period.state.tapCount).toBe(2)
+    expect(period.state.residueLen).toBe(1) // 0 + "。".length
+    expect(period.state.pendingDelete).toBe(false)
+
+    const third = reduceSpaceGesture(period.state, input, spaceInputEvent(), 1_313)
+    expect(third.fire).toBe(true)
+    expect(third.residueLen).toBe(2)
+  })
+
+  it('a pendingDelete never fires the menu by itself, no matter tapCount', () => {
+    // Two real taps, then a delete right after — still can't fire on the
+    // delete alone even though this would be tap 3 if it were a plain space.
+    let state = reduceSpaceGesture(INITIAL_SPACE_GESTURE_STATE, input, spaceInputEvent(), 1_000).state
+    state = reduceSpaceGesture(state, input, spaceInputEvent(), 1_010).state
+    expect(state.tapCount).toBe(2)
+
+    const deleted = reduceSpaceGesture(
+      state,
+      input,
+      spaceInputEvent({ inputType: 'deleteContentBackward', data: null }),
+      1_020,
+    )
+    expect(deleted.fire).toBe(false)
+    expect(deleted.state.pendingDelete).toBe(true)
+  })
+
+  it('does not start counting when tapCount is 0 (a lone, real backspace)', () => {
+    const result = reduceSpaceGesture(
+      INITIAL_SPACE_GESTURE_STATE,
+      input,
+      spaceInputEvent({ inputType: 'deleteContentBackward', data: null }),
+      1_000,
+    )
+    expect(result.fire).toBe(false)
+    expect(result.state).toEqual(INITIAL_SPACE_GESTURE_STATE)
+  })
+
+  // Negative case explicitly called out in the task write-up: whatever
+  // follows a pendingDelete that *isn't* a matching period insertText —
+  // this is a genuine, unrelated backspace, so the whole run disarms.
+  it('a non-period event right after the delete resets the whole run (real backspace)', () => {
+    const state = reduceSpaceGesture(INITIAL_SPACE_GESTURE_STATE, input, spaceInputEvent(), 1_000).state
+    const deleted = reduceSpaceGesture(
+      state,
+      input,
+      spaceInputEvent({ inputType: 'deleteContentBackward', data: null }),
+      1_158,
+    ).state
+    expect(deleted.pendingDelete).toBe(true)
+
+    const result = reduceSpaceGesture(deleted, input, spaceInputEvent({ data: 'k' }), 1_158 + 10)
+    expect(result.fire).toBe(false)
+    expect(result.state).toEqual(INITIAL_SPACE_GESTURE_STATE)
+  })
+
+  it('a period insertText arriving after SAME_TAP_WINDOW_MS resets instead of completing R3', () => {
+    const state = reduceSpaceGesture(INITIAL_SPACE_GESTURE_STATE, input, spaceInputEvent(), 1_000).state
+    const deleted = reduceSpaceGesture(
+      state,
+      input,
+      spaceInputEvent({ inputType: 'deleteContentBackward', data: null }),
+      1_158,
+    ).state
+
+    const result = reduceSpaceGesture(
+      deleted,
+      input,
+      spaceInputEvent({ data: '。' }),
+      1_158 + SAME_TAP_WINDOW_MS + 1,
+    )
+    expect(result.fire).toBe(false)
+    expect(result.state).toEqual(INITIAL_SPACE_GESTURE_STATE)
+  })
+})
+
+// Real on-device event traces (captured with an input-inspector devtools
+// recorder against a live macOS Chrome / macOS Safari-engine iOS build, one
+// per platform × input-locale combination), reduced to the handful of
+// `input` events that matter here — `inputType`, `data`/`dataTransfer`
+// text, and *relative* timestamps (ms since the first tap) preserving the
+// real gaps observed between events. Field text is a stand-in for the
+// traces' own "测试"/"test" (all four were captured typing that word, then
+// summoning the gesture).
+describe('reduceSpaceGesture, real on-device trace replays', () => {
+  interface TraceStep {
+    t: number
+    inputType: string
+    data?: string | null
+    replacementText?: string
+  }
+
+  function replay(steps: TraceStep[]) {
+    let state = INITIAL_SPACE_GESTURE_STATE
+    let last: ReturnType<typeof reduceSpaceGesture> | null = null
+    for (const step of steps) {
+      const event: SpaceGestureInputEvent =
+        step.replacementText !== undefined
+          ? (() => {
+              const dataTransfer = new DataTransfer()
+              dataTransfer.setData('text/plain', step.replacementText!)
+              return { inputType: step.inputType, data: null, isComposing: false, dataTransfer }
+            })()
+          : { inputType: step.inputType, data: step.data ?? null, isComposing: false }
+      last = reduceSpaceGesture(state, input, event, step.t)
+      state = last.state
+    }
+    return last!
+  }
+
+  it('macOS, English input locale: 3 taps fire with a clean strip back to "test"', () => {
+    const result = replay([
+      { t: 0, inputType: 'insertText', data: ' ' }, // tap 1
+      { t: 173, inputType: 'insertText', data: '. ' }, // tap 2: OS substitution
+      { t: 319, inputType: 'insertText', data: ' ' }, // tap 3
+    ])
+    expect(result.fire).toBe(true)
+    expect(result.residueLen).toBe(3)
+    expect(stripTrailingGestureResidue('test' + '.  ', result.residueLen)).toBe('test')
+  })
+
+  it('macOS, Chinese input locale: 3 taps fire with a clean strip back to "测试"', () => {
+    const result = replay([
+      { t: 0, inputType: 'insertText', data: ' ' },
+      { t: 167, inputType: 'insertText', data: '。' },
+      { t: 306, inputType: 'insertText', data: ' ' },
+    ])
+    expect(result.fire).toBe(true)
+    expect(result.residueLen).toBe(2)
+    expect(stripTrailingGestureResidue('测试' + '。 ', result.residueLen)).toBe('测试')
+  })
+
+  it('iOS, English input locale: 3 taps (with a coalesced attached-space) fire with a clean strip back to "test"', () => {
+    const result = replay([
+      { t: 0, inputType: 'insertText', data: ' ' }, // tap 1
+      { t: 168, inputType: 'insertReplacementText', replacementText: '.' }, // tap 2, first half
+      { t: 179, inputType: 'insertText', data: ' ' }, // tap 2, attached second half (11ms later)
+      { t: 317, inputType: 'insertText', data: ' ' }, // tap 3
+    ])
+    expect(result.fire).toBe(true)
+    expect(result.residueLen).toBe(3)
+    expect(stripTrailingGestureResidue('test' + '.  ', result.residueLen)).toBe('test')
+  })
+
+  it('iOS, Chinese input locale: 3 taps (with a coalesced delete+period) fire with a clean strip back to "测试"', () => {
+    const result = replay([
+      { t: 0, inputType: 'insertText', data: ' ' }, // tap 1
+      { t: 158, inputType: 'deleteContentBackward' }, // tap 2, first half
+      { t: 173, inputType: 'insertText', data: '。' }, // tap 2, second half (15ms later)
+      { t: 313, inputType: 'insertText', data: ' ' }, // tap 3
+    ])
+    expect(result.fire).toBe(true)
+    expect(result.residueLen).toBe(2)
+    expect(stripTrailingGestureResidue('测试' + '。 ', result.residueLen)).toBe('测试')
   })
 })
 
@@ -354,55 +717,80 @@ describe('reduceSpaceGesture, wired like content.ts', () => {
   })
 })
 
-describe('stripTrailingGestureSpaces', () => {
-  it('strips exactly the 3 trailing gesture spaces', () => {
-    expect(stripTrailingGestureSpaces('hello world   ')).toBe('hello world')
+describe('stripTrailingGestureResidue', () => {
+  it('strips exactly the 3 trailing gesture spaces (default residueLen)', () => {
+    expect(stripTrailingGestureResidue('hello world   ')).toBe('hello world')
   })
 
   it('leaves text unchanged when it does not end with the gesture run', () => {
-    expect(stripTrailingGestureSpaces('hello world')).toBe('hello world')
-    expect(stripTrailingGestureSpaces('hello world ')).toBe('hello world ')
-    expect(stripTrailingGestureSpaces('hello world  ')).toBe('hello world  ')
+    expect(stripTrailingGestureResidue('hello world')).toBe('hello world')
+    expect(stripTrailingGestureResidue('hello world ')).toBe('hello world ')
+    expect(stripTrailingGestureResidue('hello world  ')).toBe('hello world  ')
   })
 
   it('only consumes the run itself, leaving any pre-existing trailing spaces untouched', () => {
     // Two pre-existing trailing spaces, then the 3-space gesture typed after.
-    expect(stripTrailingGestureSpaces('hello world     ')).toBe('hello world  ')
+    expect(stripTrailingGestureResidue('hello world     ')).toBe('hello world  ')
   })
 
   it('is a no-op on a field that is only the gesture spaces (no real content)', () => {
-    expect(stripTrailingGestureSpaces('   ')).toBe('')
+    expect(stripTrailingGestureResidue('   ')).toBe('')
   })
 
-  // The `spaceCount` param — how many same-rhythm extra taps
-  // `shouldAbsorbGestureMenuInput` absorbed beyond the base 3 also need
-  // stripping.
-  it('strips exactly `spaceCount` trailing spaces when given an explicit count', () => {
-    expect(stripTrailingGestureSpaces('hello world     ', 5)).toBe('hello world')
+  // `residueLen` — how many trailing characters an R1/R2/R3 substitution
+  // (or same-rhythm extra taps `shouldAbsorbGestureMenuInput` absorbed)
+  // actually deposited.
+  it('strips exactly `residueLen` trailing characters when given an explicit count', () => {
+    expect(stripTrailingGestureResidue('hello world     ', 5)).toBe('hello world')
   })
 
-  it('does not strip if fewer trailing spaces are present than `spaceCount` calls for', () => {
-    expect(stripTrailingGestureSpaces('hello world   ', 5)).toBe('hello world   ')
+  it('does not strip if fewer trailing characters are present than `residueLen` calls for', () => {
+    expect(stripTrailingGestureResidue('hello world   ', 5)).toBe('hello world   ')
   })
 
   it('with an explicit count, still only consumes exactly that many, leaving any further pre-existing trailing spaces untouched', () => {
-    // 2 pre-existing trailing spaces, then a 4-space run (3 + 1 absorbed tap).
-    expect(stripTrailingGestureSpaces('hello world  ' + ' '.repeat(4), 4)).toBe(
+    // 2 pre-existing trailing spaces, then a 4-character run (3 + 1 absorbed tap).
+    expect(stripTrailingGestureResidue('hello world  ' + ' '.repeat(4), 4)).toBe(
       'hello world  ',
     )
   })
 
-  it('a spaceCount of 0 (or negative) is a no-op, not an empty-string bug', () => {
+  it('a residueLen of 0 (or negative) is a no-op, not an empty-string bug', () => {
     // `text.slice(0, -0)` is a classic JS footgun — `-0 === 0`, so a naive
-    // `text.slice(0, -spaceCount.length)` without this guard would wipe
-    // the whole string instead of leaving it untouched.
-    expect(stripTrailingGestureSpaces('hello world', 0)).toBe('hello world')
-    expect(stripTrailingGestureSpaces('hello world', -1)).toBe('hello world')
+    // `text.slice(0, -residueLen)` without this guard would wipe the whole
+    // string instead of leaving it untouched.
+    expect(stripTrailingGestureResidue('hello world', 0)).toBe('hello world')
+    expect(stripTrailingGestureResidue('hello world', -1)).toBe('hello world')
+  })
+
+  it('strips a period-like residue (R1/R3 macOS/iOS Chinese shape), not just spaces', () => {
+    expect(stripTrailingGestureResidue('测试。 ', 2)).toBe('测试')
+    expect(stripTrailingGestureResidue('test.  ', 3)).toBe('test')
+  })
+
+  // Decision point #6 in the task write-up: the defensive, all-or-nothing
+  // check. If the tracked `residueLen` and the field's actual trailing
+  // content have drifted out of sync, better to leave a little residue
+  // than to eat real content.
+  describe('defensive check: every trailing character must match the residue class, or nothing is stripped', () => {
+    it('does not strip when one of the trailing characters is not a space or period-like character', () => {
+      // "residueLen: 3" claims the last 3 characters are gesture residue,
+      // but the middle one ("x") plainly isn't.
+      expect(stripTrailingGestureResidue('hello wor x ', 3)).toBe('hello wor x ')
+    })
+
+    it('does not strip when residueLen is larger than the text itself', () => {
+      expect(stripTrailingGestureResidue('. ', 5)).toBe('. ')
+    })
+
+    it('still strips normally once every trailing character does match', () => {
+      expect(stripTrailingGestureResidue('hello world. ', 2)).toBe('hello world')
+    })
   })
 })
 
 describe('shouldAbsorbGestureMenuInput', () => {
-  const baseState: GestureMenuResidueState = { count: SPACE_GESTURE_TARGET_COUNT, lastTime: 1_000 }
+  const baseState: GestureMenuResidueState = { residueLen: SPACE_GESTURE_TARGET_COUNT, lastTime: 1_000 }
 
   function spaceEvent(overrides: Partial<{ inputType: string; data: string | null; isComposing: boolean }> = {}) {
     return { inputType: 'insertText', data: ' ', isComposing: false, ...overrides }
@@ -411,7 +799,7 @@ describe('shouldAbsorbGestureMenuInput', () => {
   it('absorbs a real space keystroke landing within the rhythm window', () => {
     const result = shouldAbsorbGestureMenuInput(baseState, spaceEvent(), 1_000 + 100)
     expect(result.absorb).toBe(true)
-    expect(result.state).toEqual({ count: SPACE_GESTURE_TARGET_COUNT + 1, lastTime: 1_100 })
+    expect(result.state).toEqual({ residueLen: SPACE_GESTURE_TARGET_COUNT + 1, lastTime: 1_100 })
   })
 
   it('absorbs right up to the exact edge of the window (<=), and refreshes the timestamp from it', () => {
@@ -473,7 +861,7 @@ describe('shouldAbsorbGestureMenuInput', () => {
       const now = 1_000 + i * 100 // well within the window each time
       const result = shouldAbsorbGestureMenuInput(state, spaceEvent(), now)
       expect(result.absorb).toBe(true)
-      expect(result.state.count).toBe(SPACE_GESTURE_TARGET_COUNT + i)
+      expect(result.state.residueLen).toBe(SPACE_GESTURE_TARGET_COUNT + i)
       expect(result.state.lastTime).toBe(now)
       state = result.state
     }

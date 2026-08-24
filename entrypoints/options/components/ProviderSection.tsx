@@ -118,7 +118,7 @@ export function ProviderSection({
   const connInfo = {
     idle: { dot: 'bg-muted', label: 'Not connected' },
     checking: { dot: 'bg-muted animate-pulse', label: 'Checking connection…' },
-    connected: { dot: 'bg-green-500', label: `Connected · ${provider.imp!.model}` },
+    connected: { dot: 'bg-green-500', label: `Connected · ${provider.imp?.model ?? 'imp'}` },
     disconnected: { dot: 'bg-red-500', label: 'Connection lost — reconnect' },
     unknown: { dot: 'bg-amber-500', label: "Couldn't verify connection" },
   }[connStatus]

@@ -89,7 +89,8 @@ export function parseCommandTrigger(
   const match = trimmed.match(new RegExp(`(${escapedPrefix}(\\S+))$`))
   if (!match) return null
 
-  const [token, name] = [match[1], match[2]]
+  const token = match[1]!
+  const name = match[2]!
   const command = commands.find(
     (c) => c.name.toLowerCase() === name.toLowerCase(),
   )

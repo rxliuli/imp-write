@@ -13,7 +13,9 @@ const MENU_HOST = '#imp-write-command-menu-host'
 // `attachShadow({ mode: 'open' })` root without any extra chaining.
 const FIX_BUTTON = `${MENU_HOST} button:text-is("/fix")`
 const MENU_LIST = `${MENU_HOST} .imp-write-menu-list`
-const SETTINGS_BUTTON = `${MENU_HOST} button:text-is("⚙ Settings")`
+// Settings is now a gear icon in the menu header (no longer a full-width
+// footer row) — see `lib/commandMenu.ts`'s `buildMenuElement`.
+const SETTINGS_BUTTON = `${MENU_HOST} button:text-is("⚙")`
 
 test('three real spaces at the end of a field summons the command menu', async ({
   context,
@@ -391,10 +393,12 @@ test('three real spaces does not summon the command menu on desktop by default (
 // Usability regression for a menu with dozens of commands (lib/commandMenu.ts's
 // `.imp-write-menu-list`): before this, the menu had no max-height and no
 // internal scroll area, so a long command list ran off the bottom of the
-// viewport — the trailing commands and the Settings entry were simply
-// unreachable. It also relied on a capture-phase `window` scroll listener to
-// dismiss the menu, which (pre-fix) would close it the moment the list
-// itself was scrolled.
+// viewport — the trailing commands (and the Settings entry, then a footer
+// row) were simply unreachable. Now the list is capped to `MAX_VISIBLE_COMMANDS`
+// rows and scrolls internally, and Settings lives in the header so it never
+// scrolls out of reach. It also relied on a capture-phase `window` scroll
+// listener to dismiss the menu, which (pre-fix) would close it the moment
+// the list itself was scrolled.
 test('with dozens of commands, the menu stays usable: Settings stays reachable and scrolling the list does not close it', async ({
   context,
   baseURL,
@@ -418,9 +422,9 @@ test('with dozens of commands, the menu stays usable: Settings stays reachable a
   const menuHost = page.locator(MENU_HOST)
   await expect(menuHost).toBeVisible()
 
-  // The Settings row is pinned in a non-scrolling footer, so it stays
-  // within the viewport regardless of how long the command list above it
-  // is — never pushed off past the bottom of the screen.
+  // The Settings gear is pinned in the header (not the scrollable command
+  // list), so it stays within the viewport regardless of how long the list
+  // above it is.
   const settingsButton = page.locator(SETTINGS_BUTTON)
   await expect(settingsButton).toBeVisible()
   const viewport = page.viewportSize()!

@@ -126,7 +126,7 @@ describe('matchShortcut', () => {
 
     expect(event.defaultPrevented).toBe(true)
     expect(onMatch).toHaveBeenCalledTimes(1)
-    expect(onMatch.mock.calls[0][0].name).toBe('tl')
+    expect(onMatch.mock.calls[0]![0].name).toBe('tl')
 
     unwire()
   })

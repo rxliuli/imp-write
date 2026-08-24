@@ -1,4 +1,5 @@
-import { defineConfig, UserManifest } from 'wxt'
+import { defineConfig } from 'wxt'
+import type { UserManifest } from 'wxt'
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({

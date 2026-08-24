@@ -33,6 +33,7 @@ import {
   parseCommandsFile,
   serializeCommands,
 } from '@/lib/commandsTransfer'
+import { saveBlob } from '@/lib/saveFile'
 import type { Command, Settings } from '@/lib/settings'
 
 // YYYY-MM-DD for today, used in the exported file's name.
@@ -156,6 +157,9 @@ export function CommandsSection({
 
   function openEdit(index: number) {
     const cmd = settings.commands[index]
+    // An index can be stale if the command was removed between render and
+    // click — treat a missing one as a no-op rather than crashing.
+    if (!cmd) return
     setFormTarget(index)
     setDraftName(cmd.name)
     setDraftPrompt(cmd.prompt)
@@ -202,13 +206,18 @@ export function CommandsSection({
     if (formTarget === 'new') {
       next.push(entry)
     } else {
-      const oldName = settings.commands[formTarget].name
+      const existing = settings.commands[formTarget]
+      if (!existing) return
+      const oldName = existing.name
       next[formTarget] = entry
       // Renaming a custom command: migrate its shortcut binding (keyed by
       // name) to the new name instead of silently dropping it.
       if (oldName !== entry.name && oldName in settings.shortcuts) {
         nextShortcuts = { ...settings.shortcuts }
-        nextShortcuts[entry.name] = nextShortcuts[oldName]
+        const bound = nextShortcuts[oldName]
+        if (bound !== undefined) {
+          nextShortcuts[entry.name] = bound
+        }
         delete nextShortcuts[oldName]
       }
     }
@@ -218,6 +227,7 @@ export function CommandsSection({
 
   function removeCommand(index: number) {
     const removed = settings.commands[index]
+    if (!removed) return
     const nextShortcuts = { ...settings.shortcuts }
     delete nextShortcuts[removed.name]
     update({
@@ -273,14 +283,13 @@ export function CommandsSection({
   function exportCommands() {
     const json = serializeCommands(settings.commands)
     const blob = new Blob([json], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `imp-write-commands-${todayDateString()}.json`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    void saveBlob(blob, `imp-write-commands-${todayDateString()}.json`, {
+      title: 'Imp Write commands',
+    }).then((result) => {
+      if (!result.ok) {
+        toast.error('Failed to export commands.')
+      }
+    })
   }
 
   function openImportDialog() {

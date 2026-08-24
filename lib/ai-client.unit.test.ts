@@ -66,7 +66,7 @@ describe('runPrompt (byok mode)', () => {
   it('sends model and prompt as a single user message', async () => {
     const fetchFn = vi.fn().mockResolvedValue(okResponse('ok'))
     await runPrompt(byokProvider('key-a'), 'fix this text', fetchFn)
-    const [, init] = fetchFn.mock.calls[0]
+    const [, init] = fetchFn.mock.calls[0]!
     const body = JSON.parse(init.body)
     expect(body).toEqual({
       model: 'gpt-test',
@@ -126,7 +126,7 @@ describe('runPrompt (per-provider request interceptors)', () => {
     provider.byok.baseUrl = 'https://generativelanguage.googleapis.com/v1beta/openai'
     provider.byok.model = 'gemini-3-flash'
     await runPrompt(provider, 'p', fetchFn)
-    const [, init] = fetchFn.mock.calls[0]
+    const [, init] = fetchFn.mock.calls[0]!
     const body = JSON.parse(init.body)
     expect(body.reasoning_effort).toBe('low')
   })
@@ -137,7 +137,7 @@ describe('runPrompt (per-provider request interceptors)', () => {
     provider.byok.baseUrl = 'https://api.example.com/v1'
     provider.byok.model = 'gemini-3-flash'
     await runPrompt(provider, 'p', fetchFn)
-    const [, init] = fetchFn.mock.calls[0]
+    const [, init] = fetchFn.mock.calls[0]!
     const body = JSON.parse(init.body)
     expect(body.reasoning_effort).toBeUndefined()
   })

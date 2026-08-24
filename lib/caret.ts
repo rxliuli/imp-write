@@ -117,7 +117,7 @@ export function getContentEditableCaretOffset(
       } else if (startOffset < startContainer.childNodes.length) {
         startContainer.insertBefore(
           zeroWidthNode,
-          startContainer.childNodes[startOffset],
+          startContainer.childNodes[startOffset]!,
         )
       } else {
         startContainer.appendChild(zeroWidthNode)

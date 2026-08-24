@@ -159,6 +159,14 @@ const MENU_HOST_ID = 'imp-write-command-menu-host'
 // sit above anything a host page could set.
 const MENU_Z_INDEX = 2147483647
 
+// How many command rows the menu shows before the list scrolls, and the
+// height of each `.imp-write-menu-item` row. Named constants (not bare
+// literals) because they jointly cap `.imp-write-menu-list`'s max-height in
+// `buildMenuElement`, so "N commands visible without scrolling" is defined
+// in exactly one place instead of being sprinkled across CSS and JS.
+const MAX_VISIBLE_COMMANDS = 4
+const MENU_ROW_HEIGHT = 44
+
 // Colors are CSS custom properties (light values as the default, overridden
 // under `@media (prefers-color-scheme: dark)`) rather than a shadcn/Tailwind
 // token system — this stylesheet is injected standalone into an isolated
@@ -204,9 +212,19 @@ const MENU_STYLES = `
     display: flex;
     flex-direction: column;
   }
+  /* The header row: title on the left, a Settings gear button on the right.
+     A flex row so the gear never needs its own footer row — saves vertical
+     space and keeps the command list full-width. min-height: 44px matches
+     .imp-write-menu-item's row height so the header control and the
+     command rows agree on the same touch-target height. */
   .imp-write-menu-title {
     flex-shrink: 0;
-    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 44px;
+    padding: 0 10px 0 14px;
     font-size: 12px;
     font-weight: 600;
     letter-spacing: 0.02em;
@@ -214,10 +232,37 @@ const MENU_STYLES = `
     color: var(--imp-menu-muted-fg);
     border-bottom: 1px solid var(--imp-menu-divider);
   }
+  .imp-write-menu-title-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* The gear itself. all: unset (like the items) so no UA button chrome
+     leaks in; 44x44 keeps it a comfortable tap target on iOS. */
+  .imp-write-menu-gear {
+    all: unset;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    color: var(--imp-menu-muted-fg);
+    cursor: pointer;
+  }
+  .imp-write-menu-gear:hover,
+  .imp-write-menu-gear:active {
+    background: var(--imp-menu-hover-bg);
+    color: var(--imp-menu-fg);
+  }
   /* The scrollable command list. min-height: 0 overrides flexbox's default
      min-height: auto, which would otherwise keep this item at its content
-     height and stop .imp-write-menu's max-height (set inline by
-     CommandMenu.position) from ever forcing it to actually scroll.
+     height and stop .imp-write-menu-list's own inline max-height (set to
+     MAX_VISIBLE_COMMANDS rows in buildMenuElement, then further clamped by
+     .imp-write-menu's max-height inline set in CommandMenu.position) from
+     ever forcing it to actually scroll.
      overscroll-behavior: contain stops an overscroll at the top/bottom
      edge from chaining into a scroll of the host page — which would
      otherwise immediately close the menu via the window scroll listener
@@ -240,6 +285,10 @@ const MENU_STYLES = `
     box-sizing: border-box;
     display: flex;
     align-items: center;
+    /* Fill the row regardless of UA (iOS Safari buttons don't always stretch
+       like Chrome does — this is what makes the hover/active highlight cover
+       the whole row instead of just the text). */
+    width: 100%;
     min-height: 44px;
     padding: 0 14px;
     font-size: 15px;
@@ -250,21 +299,7 @@ const MENU_STYLES = `
   .imp-write-menu-item:active {
     background: var(--imp-menu-hover-bg);
   }
-  /* Pinned below .imp-write-menu-list rather than scrolling with it —
-     flex-shrink: 0 keeps it at its content height regardless of how much
-     .imp-write-menu-list above it gets compressed, so Settings stays
-     reachable no matter how long the command list is. */
-  .imp-write-menu-footer {
-    flex-shrink: 0;
-  }
-  .imp-write-menu-divider {
-    height: 1px;
-    background: var(--imp-menu-divider);
-    margin: 4px 0;
-  }
-  .imp-write-menu-settings {
-    color: var(--imp-menu-muted-fg);
-  }
+
 `
 
 export interface CommandMenuCallbacks {
@@ -457,17 +492,39 @@ export class CommandMenu {
     const menu = document.createElement('div')
     menu.className = 'imp-write-menu'
 
-    const title = document.createElement('div')
-    title.className = 'imp-write-menu-title'
-    title.textContent = 'Imp Write'
-    menu.appendChild(title)
+    // Header: title on the left, Settings gear on the right. The gear lives
+    // in the header (not a footer row) so the command list below it is
+    // full-width and the menu stays as short as possible — the Settings entry
+    // never scrolls away or competes with commands for vertical space.
+    const header = document.createElement('div')
+    header.className = 'imp-write-menu-title'
 
-    // The only part of the menu that scrolls — commands live here, Settings
-    // (below) is pinned outside it. See `.imp-write-menu-list`'s CSS comment
-    // for why this needs `min-height: 0` to actually scroll under a
-    // `max-height`-clamped `.imp-write-menu`.
+    const title = document.createElement('span')
+    title.className = 'imp-write-menu-title-text'
+    title.textContent = 'Imp Write'
+    header.appendChild(title)
+
+    const settings = document.createElement('button')
+    settings.type = 'button'
+    settings.className = 'imp-write-menu-gear'
+    settings.textContent = '⚙'
+    settings.setAttribute('aria-label', 'Settings')
+    settings.title = 'Settings'
+    settings.addEventListener('click', () => {
+      this.destroy()
+      this.callbacks.onOpenSettings()
+    })
+    header.appendChild(settings)
+
+    menu.appendChild(header)
+
+    // The only part of the menu that scrolls. `max-height` is set to show
+    // `MAX_VISIBLE_COMMANDS` rows before scrolling — see
+    // `.imp-write-menu-list`'s CSS comment for why this needs `min-height: 0`
+    // to actually scroll instead of being pinned to its content height.
     const list = document.createElement('div')
     list.className = 'imp-write-menu-list'
+    list.style.maxHeight = `${MAX_VISIBLE_COMMANDS * MENU_ROW_HEIGHT}px`
     if (commands.length === 0) {
       const empty = document.createElement('div')
       empty.className = 'imp-write-menu-empty'
@@ -487,25 +544,6 @@ export class CommandMenu {
       }
     }
     menu.appendChild(list)
-
-    const footer = document.createElement('div')
-    footer.className = 'imp-write-menu-footer'
-
-    const divider = document.createElement('div')
-    divider.className = 'imp-write-menu-divider'
-    footer.appendChild(divider)
-
-    const settings = document.createElement('button')
-    settings.type = 'button'
-    settings.className = 'imp-write-menu-item imp-write-menu-settings'
-    settings.textContent = '⚙ Settings'
-    settings.addEventListener('click', () => {
-      this.destroy()
-      this.callbacks.onOpenSettings()
-    })
-    footer.appendChild(settings)
-
-    menu.appendChild(footer)
 
     return menu
   }

@@ -35,6 +35,18 @@ function getMenuListEl(): HTMLElement | null {
   return host.shadowRoot.querySelector('.imp-write-menu-list')
 }
 
+function getCommandButtons(): HTMLButtonElement[] {
+  const host = getMenuHost()
+  if (!host?.shadowRoot) return []
+  return Array.from(host.shadowRoot.querySelectorAll<HTMLButtonElement>('.imp-write-menu-item'))
+}
+
+function getSettingsButton(): HTMLButtonElement | null {
+  const host = getMenuHost()
+  if (!host?.shadowRoot) return null
+  return host.shadowRoot.querySelector<HTMLButtonElement>('.imp-write-menu-gear')
+}
+
 function makeCommands(count: number): Command[] {
   return Array.from({ length: count }, (_, i) => ({
     name: `cmd${i}`,
@@ -297,30 +309,36 @@ describe('CommandMenu', () => {
     expect(() => menu.destroy()).not.toThrow()
   })
 
-  it('renders one touch-friendly button per command, plus a trailing Settings entry', () => {
+  it('renders one touch-friendly button per command, plus a Settings gear in the header', () => {
     menu.show(target, commands)
     expect(menu.isOpen).toBe(true)
 
-    const buttons = getMenuButtons()
-    expect(buttons.map((b) => b.textContent)).toEqual(['/fix', '/tl', '⚙ Settings'])
+    expect(getCommandButtons().map((b) => b.textContent)).toEqual(['/fix', '/tl'])
+    // The Settings entry no longer takes its own footer row — it's a gear in
+    // the header, so the command list is full-width and the menu stays short.
+    const settings = getSettingsButton()
+    expect(settings).not.toBeNull()
+    expect(settings!.textContent).toBe('⚙')
+    expect(settings!.getAttribute('aria-label')).toBe('Settings')
     // "touch friendly: row height >= 44px" — computed from the CSS rule
     // rather than asserted against the stylesheet text, so this actually
     // exercises the rendered layout.
-    for (const button of buttons) {
+    for (const button of getMenuButtons()) {
       expect(button.getBoundingClientRect().height).toBeGreaterThanOrEqual(44)
     }
   })
 
-  it('shows an empty-state message (and still a Settings entry) when there are no commands', () => {
+  it('shows an empty-state message (and still a header Settings gear) when there are no commands', () => {
     menu.show(target, [])
     const host = getMenuHost()!
     expect(host.shadowRoot!.textContent).toContain('No commands configured yet.')
-    expect(getMenuButtons().map((b) => b.textContent)).toEqual(['⚙ Settings'])
+    expect(getCommandButtons()).toHaveLength(0)
+    expect(getSettingsButton()?.textContent).toBe('⚙')
   })
 
   it('tapping a command closes the menu and invokes onSelect with the target element and that command', () => {
     menu.show(target, commands)
-    getMenuButtons()[0]!.click()
+    getCommandButtons()[0]!.click()
 
     expect(onSelect).toHaveBeenCalledTimes(1)
     expect(onSelect).toHaveBeenCalledWith(target, commands[0])
@@ -331,8 +349,7 @@ describe('CommandMenu', () => {
 
   it('tapping Settings closes the menu and invokes onOpenSettings', () => {
     menu.show(target, commands)
-    const buttons = getMenuButtons()
-    buttons[buttons.length - 1]!.click()
+    getSettingsButton()!.click()
 
     expect(onOpenSettings).toHaveBeenCalledTimes(1)
     expect(onSelect).not.toHaveBeenCalled()
@@ -437,18 +454,22 @@ describe('CommandMenu', () => {
     expect(list.scrollHeight).toBeGreaterThan(list.clientHeight)
   })
 
-  it('with many commands, the Settings entry stays pinned within the viewport instead of scrolling out of reach', () => {
+  it('with many commands, the Settings gear stays visible in the header and the list scrolls internally', () => {
     menu.show(target, makeCommands(30))
 
     const viewportHeight = window.visualViewport?.height ?? window.innerHeight
-    const settingsButton = getMenuButtons().at(-1)!
-    const settingsRect = settingsButton.getBoundingClientRect()
+    const settingsRect = getSettingsButton()!.getBoundingClientRect()
     expect(settingsRect.top).toBeGreaterThanOrEqual(0)
     expect(settingsRect.bottom).toBeLessThanOrEqual(viewportHeight)
+
+    // The gear lives in the header (never scrolls with the list), and the
+    // command list itself scrolls internally to fit the fixed max-height.
+    const list = getMenuListEl()!
+    expect(list.scrollHeight).toBeGreaterThan(list.clientHeight)
   })
 
   it('with only a few commands, the list has no scrollbar — layout is unchanged from before', () => {
-    menu.show(target, makeCommands(4))
+    menu.show(target, makeCommands(3))
 
     const list = getMenuListEl()!
     expect(list.scrollHeight).toBeLessThanOrEqual(list.clientHeight)

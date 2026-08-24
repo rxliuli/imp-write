@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fakeBrowser } from 'wxt/testing'
+import { fakeBrowser } from 'wxt/testing/fake-browser'
 import { BUILTIN_COMMANDS } from './commands'
 import {
   DEFAULT_SETTINGS,
@@ -388,7 +388,7 @@ describe('built-in command seeding (commandsSeeded)', () => {
       (c) => c.name.toLowerCase() === 'fix',
     )
     expect(fixEntries).toHaveLength(1)
-    expect(fixEntries[0].prompt).toBe('my own fix prompt')
+    expect(fixEntries[0]!.prompt).toBe('my own fix prompt')
   })
 
   it('does not re-seed once commandsSeeded is already true', async () => {

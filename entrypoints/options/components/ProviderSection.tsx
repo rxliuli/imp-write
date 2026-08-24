@@ -42,6 +42,33 @@ export function ProviderSection({
   const [apiKeyVisible, setApiKeyVisible] = useState(false)
   const [testing, setTesting] = useState(false)
 
+  // Auto-verify the stored Imp key when the options page opens (and whenever
+  // the key changes), so the "Connected" badge reflects whether the key is
+  // still valid rather than just "we have a stored key". Never calls the
+  // model — see background.ts's checkConnection handler.
+  const [connStatus, setConnStatus] = useState<'idle' | 'checking' | 'connected' | 'disconnected' | 'unknown'>('idle')
+  useEffect(() => {
+    if (!connected) {
+      setConnStatus('idle')
+      return
+    }
+    let cancelled = false
+    setConnStatus('checking')
+    void (async () => {
+      let next: 'connected' | 'disconnected' | 'unknown'
+      try {
+        const result = await messager.sendMessage('checkConnection')
+        next = result.ok ? 'connected' : 'disconnected'
+      } catch {
+        next = 'unknown'
+      }
+      if (!cancelled) setConnStatus(next)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [connected, provider.imp?.apiKey])
+
   // Re-sync drafts whenever the committed value changes from elsewhere
   // (another edit, a storage.onChanged event, etc). This never fires while
   // the user is mid-keystroke since we only persist on blur.
@@ -88,6 +115,14 @@ export function ProviderSection({
     }
   }
 
+  const connInfo = {
+    idle: { dot: 'bg-muted', label: 'Not connected' },
+    checking: { dot: 'bg-muted animate-pulse', label: 'Checking connection…' },
+    connected: { dot: 'bg-green-500', label: `Connected · ${provider.imp!.model}` },
+    disconnected: { dot: 'bg-red-500', label: 'Connection lost — reconnect' },
+    unknown: { dot: 'bg-amber-500', label: "Couldn't verify connection" },
+  }[connStatus]
+
   return (
     <Card>
       <CardHeader>
@@ -101,10 +136,8 @@ export function ProviderSection({
         {connected ? (
           <div className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-center gap-2 text-sm">
-              <span className="size-2 shrink-0 rounded-full bg-green-500" />
-              <span className="truncate">
-                Connected · {provider.imp!.model}
-              </span>
+              <span className={cn('size-2 shrink-0 rounded-full', connInfo.dot)} />
+              <span className="truncate">{connInfo.label}</span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Button variant="ghost" size="sm" onClick={useByokInstead}>

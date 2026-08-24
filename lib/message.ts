@@ -26,6 +26,12 @@ interface ProtocolMap {
   // box's content.
   testConnection(): Promise<{ ok: true } | { ok: false; error: string }>
 
+  // options page (on mount, when an Imp connection is stored) => background:
+  // zero-cost check that the stored Imp api key is still valid (401 ==
+  // revoked) so the "Connected" badge reflects reality rather than just local
+  // state.
+  checkConnection(): Promise<{ ok: true } | { ok: false; error: string }>
+
   // background => content: the user tapped the toolbar action icon on a
   // mobile browser (there's no popup UI there — see background.ts's
   // `action.onClicked`). Sent to every frame of the active tab (no

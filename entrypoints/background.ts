@@ -187,6 +187,41 @@ export default defineBackground(() => {
     }
   })
 
+  // Zero-cost status check for the options page: the stored Imp key is valid
+  // iff GET {baseUrl}/me accepts it (requireAuth validates the key hash AND
+  // revokedAt, so a revoked/expired key comes back 401). A legacy baseUrl that
+  // no longer resolves returns non-JSON (the SPA fallback), which we treat as
+  // not-connected too. This never calls the model — it's a free check on page
+  // open.
+  messager.onMessage('checkConnection', async () => {
+    const settings = await getSettings()
+    const imp = settings.provider.imp
+    if (settings.provider.mode !== 'imp' || !imp) {
+      return { ok: false, error: 'not connected' } as const
+    }
+    try {
+      const res = await fetch(`${imp.baseUrl}/me`, {
+        headers: { authorization: `Bearer ${imp.apiKey}` },
+      })
+      if (res.status === 401) return { ok: false, error: 'unauthorized' } as const
+      const contentType = res.headers.get('content-type') ?? ''
+      if (!contentType.includes('application/json')) {
+        return { ok: false, error: 'unexpected endpoint response' } as const
+      }
+      const body = (await res.json().catch(() => null)) as { email?: unknown } | null
+      if (typeof body?.email !== 'string') {
+        return { ok: false, error: 'unexpected endpoint response' } as const
+      }
+      return { ok: true } as const
+    } catch (err) {
+      console.error(
+        '[imp-write] checkConnection failed:',
+        err instanceof Error ? err.message : err,
+      )
+      return { ok: false, error: err instanceof Error ? err.message : 'network error' } as const
+    }
+  })
+
   // Exchanges the one-time code the imp-connect content script read off the
   // success page's meta tag for a persistent Imp Credits API key. See
   // PLAN.md §6 for the full contract.

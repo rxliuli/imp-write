@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   INITIAL_SPACE_GESTURE_STATE,
+  isSpaceGestureEnabled,
   reduceSpaceGesture,
   SAME_TAP_WINDOW_MS,
   shouldAbsorbGestureMenuInput,
@@ -879,5 +880,31 @@ describe('shouldAbsorbGestureMenuInput', () => {
     // it's still comfortably inside the window.
     result = shouldAbsorbGestureMenuInput(result.state, spaceEvent(), 1_000 + 900 + 100)
     expect(result.absorb).toBe(true)
+  })
+})
+
+describe('isSpaceGestureEnabled', () => {
+  it('is enabled on a mobile platform regardless of the test override', () => {
+    expect(isSpaceGestureEnabled(true, false)).toBe(true)
+    expect(isSpaceGestureEnabled(true, true)).toBe(true)
+  })
+
+  it('is disabled on a non-mobile platform by default (no test override)', () => {
+    expect(isSpaceGestureEnabled(false, false)).toBe(false)
+  })
+
+  it('the test override alone is sufficient to enable it on a non-mobile platform', () => {
+    expect(isSpaceGestureEnabled(false, true)).toBe(true)
+  })
+
+  // The override can only ever turn the gesture *on* — it must never be
+  // able to turn it *off* for an actually-mobile platform (there would be
+  // no legitimate reason to, and a bug making it possible would be a
+  // production behavior change hiding behind what's supposed to be an
+  // inert, test-only flag).
+  it('is a pure OR — there is no combination that disables it on mobile', () => {
+    for (const testOverride of [false, true]) {
+      expect(isSpaceGestureEnabled(true, testOverride)).toBe(true)
+    }
   })
 })

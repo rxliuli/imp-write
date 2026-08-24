@@ -23,12 +23,14 @@ import {
 import { DEFAULT_SETTINGS, getSettings, type Command, type Settings } from '@/lib/settings'
 import {
   INITIAL_SPACE_GESTURE_STATE,
+  isSpaceGestureEnabled,
   reduceSpaceGesture,
   shouldAbsorbGestureMenuInput,
   stripTrailingGestureResidue,
   type GestureMenuResidueState,
   type SpaceGestureState,
 } from '@/lib/spaceGestureDetector'
+import { getSpaceGestureTestOverride } from '@/lib/testHooks'
 
 // Created lazily, on first actual use, so pages that never trigger a command
 // don't get an `InputLoader` instance injecting its <style> tag into
@@ -505,63 +507,85 @@ export default defineContentScript({
       commandMenu.show(element, sorted, { anchorMode: isMobile ? 'element' : 'caret' })
     }
 
-    // Three-real-space-in-a-row gesture: the desktop/all-platforms
-    // counterpart to the mobile toolbar-icon tap for summoning the floating
-    // command menu. `reduceSpaceGesture` (lib/spaceGestureDetector.ts) is a
-    // pure function — this is its DOM wiring, kept inline (not its own
-    // class) the same way the keyboard-shortcut listener below wires
-    // `matchShortcut` inline. A second, independent capture-phase `input`
-    // listener alongside `idleDetector`'s own: the two coexist simply by
-    // each never touching the other's state, and neither ever calls
-    // `preventDefault`/`stopPropagation` on an `input` event — so the
-    // idle-token trigger's own behavior is completely unaffected by this
-    // listener also observing the same events.
-    let spaceGestureState: SpaceGestureState = INITIAL_SPACE_GESTURE_STATE
-    document.addEventListener(
-      'input',
-      (e) => {
-        if (!(e instanceof InputEvent)) {
-          spaceGestureState = INITIAL_SPACE_GESTURE_STATE
-          return
-        }
-        const active = getActiveElement()
-        const element = active && isInputElement(active) ? active : null
-        const now = Date.now()
-        const result = reduceSpaceGesture(spaceGestureState, element, e, now)
-        spaceGestureState = result.state
-        if (result.fire && element) {
-          void showCommandMenuForGesture(element, now, result.residueLen)
-        }
-      },
-      true,
-    )
+    // Three-real-space-in-a-row gesture: the mobile-only counterpart to the
+    // toolbar-icon tap for summoning the floating command menu — see
+    // `isSpaceGestureEnabled`'s doc comment for why this is gated to mobile
+    // rather than every platform: desktop already has three other trigger
+    // paths (idle-pause `/token`, the right-click menu, keyboard
+    // shortcuts), and space-indented Markdown would otherwise pop the menu
+    // open constantly while typing completely unrelated content. Wrapped in
+    // its own async setup function (rather than inline in `main`) purely so
+    // this platform/test-override check can gate *whether the listeners
+    // below are ever attached at all* — on a disabled platform,
+    // `reduceSpaceGesture` is never even called, not just "called but
+    // ignored".
+    async function setupSpaceGesture() {
+      const [isMobile, testOverride] = await Promise.all([
+        isMobilePlatform(),
+        getSpaceGestureTestOverride(),
+      ])
+      if (!isSpaceGestureEnabled(isMobile, testOverride)) return
 
-    // Some browsers don't reliably fire a plain post-composition `input`
-    // event (`isComposing: false`) once a CJK/IME composition session
-    // actually ends — the identical cross-browser quirk
-    // `IdleTriggerDetector` already works around with its own
-    // `compositionend` listener (see that class's `enable()`). Without an
-    // equivalent guard here, a run that was mid-count when composition
-    // started — deliberately left untouched by `reduceSpaceGesture`'s
-    // composing guard, see its doc comment — could survive across the
-    // *entire* composed-text insertion (which isn't a real space at all)
-    // with no `input` event ever arriving to reset it, letting a single
-    // genuine space keystroke typed right after wrongly complete a stale
-    // run. Unconditionally resetting on every `compositionend` is safe: a
-    // real IME's committed text is never literally a single space, so this
-    // can never incorrectly drop a *legitimate* space run either. Doesn't
-    // affect the macOS Option-modified-key pitfall the composing guard
-    // itself exists for — that never fires an actual
-    // `compositionstart`/`compositionend` pair (a single atomic keystroke
-    // misflagged `isComposing: true`, not a real composition session), so
-    // there's nothing here to reset in that case.
-    document.addEventListener(
-      'compositionend',
-      () => {
-        spaceGestureState = INITIAL_SPACE_GESTURE_STATE
-      },
-      true,
-    )
+      // `reduceSpaceGesture` (lib/spaceGestureDetector.ts) is a pure
+      // function — this is its DOM wiring, kept inline (not its own class)
+      // the same way the keyboard-shortcut listener below wires
+      // `matchShortcut` inline. A second, independent capture-phase
+      // `input` listener alongside `idleDetector`'s own: the two coexist
+      // simply by each never touching the other's state, and neither ever
+      // calls `preventDefault`/`stopPropagation` on an `input` event — so
+      // the idle-token trigger's own behavior is completely unaffected by
+      // this listener also observing the same events.
+      let spaceGestureState: SpaceGestureState = INITIAL_SPACE_GESTURE_STATE
+      document.addEventListener(
+        'input',
+        (e) => {
+          if (!(e instanceof InputEvent)) {
+            spaceGestureState = INITIAL_SPACE_GESTURE_STATE
+            return
+          }
+          const active = getActiveElement()
+          const element = active && isInputElement(active) ? active : null
+          const now = Date.now()
+          const result = reduceSpaceGesture(spaceGestureState, element, e, now)
+          spaceGestureState = result.state
+          if (result.fire && element) {
+            void showCommandMenuForGesture(element, now, result.residueLen)
+          }
+        },
+        true,
+      )
+
+      // Some browsers don't reliably fire a plain post-composition `input`
+      // event (`isComposing: false`) once a CJK/IME composition session
+      // actually ends — the identical cross-browser quirk
+      // `IdleTriggerDetector` already works around with its own
+      // `compositionend` listener (see that class's `enable()`). Without
+      // an equivalent guard here, a run that was mid-count when
+      // composition started — deliberately left untouched by
+      // `reduceSpaceGesture`'s composing guard, see its doc comment —
+      // could survive across the *entire* composed-text insertion (which
+      // isn't a real space at all) with no `input` event ever arriving to
+      // reset it, letting a single genuine space keystroke typed right
+      // after wrongly complete a stale run. Unconditionally resetting on
+      // every `compositionend` is safe: a real IME's committed text is
+      // never literally a single space, so this can never incorrectly
+      // drop a *legitimate* space run either. Doesn't affect the macOS
+      // Option-modified-key pitfall the composing guard itself exists for
+      // — that never fires an actual `compositionstart`/`compositionend`
+      // pair (a single atomic keystroke misflagged `isComposing: true`,
+      // not a real composition session), so there's nothing here to reset
+      // in that case. Gated behind the same enablement check as the
+      // `input` listener above — on a disabled platform this attaches
+      // nothing either, rather than merely being harmless-but-present.
+      document.addEventListener(
+        'compositionend',
+        () => {
+          spaceGestureState = INITIAL_SPACE_GESTURE_STATE
+        },
+        true,
+      )
+    }
+    void setupSpaceGesture()
 
     getSettings()
       .then((next) => {

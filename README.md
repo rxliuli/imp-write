@@ -4,20 +4,36 @@ A browser extension that fixes and rewrites text in any textbox, without leaving
 
 ## Usage
 
-Type your text, then append a command at the end — `/fix`, `/improve`, `/shorten`, `/tl`
-(translate to English), or any custom command you've defined — and pause briefly. The AI
-response replaces the input's content in place. Press Esc right after to undo the
-replacement — or use your browser/OS's own undo (Cmd/Ctrl+Z); either way, undoing won't
-cause the replacement to fire again. Known limitation: if you switch away to another tab
-while a request is still in flight, the write-back can occasionally land as an append
-after the original text instead of a clean replace — Esc still reverts the whole field
-either way.
+### Triggering a command
 
-You can also run a command without the `/token` trigger: right-click inside any textbox
-for an "Imp Write" context menu listing every command, or bind a keyboard shortcut to a
-command from the options page (VSCode-style — click the field, then press the combo).
-Either way, if you have text selected only the selection is rewritten; otherwise the
-whole field is.
+**All platforms**
+
+- Type a command at the end of your text — e.g. `/fix`, `/improve`, `/shorten`, `/tl`
+  (translate to English), or any custom command you've defined — then pause briefly; it
+  runs automatically. Command names can be renamed from the options page.
+
+**Desktop**
+
+- Keyboard shortcuts — assign one to any command from the options page (VSCode-style:
+  click the field, then press the combo)
+- Right-click inside any textbox for an "Imp Write" context menu listing every command
+- Click the toolbar icon to open the options page
+
+**Mobile (Firefox for Android, Safari on iOS)**
+
+- Tap space three times at the end of your text to bring up the command menu, then tap a
+  command (a few extra taps won't hurt)
+- Tap the extension icon to bring up the same command menu
+- The gear item in the command menu opens the options page
+- Commands in the menu are sorted by most recently used
+
+Whichever trigger you use, if you have text selected only the selection is rewritten;
+otherwise the whole field is. The AI response replaces the input's content in place. Press
+Esc right after to undo the replacement — or use your browser/OS's own undo (Cmd/Ctrl+Z);
+either way, undoing won't cause the replacement to fire again. Known limitation: if you
+switch away to another tab while a request is still in flight, the write-back can
+occasionally land as an append after the original text instead of a clean replace — Esc
+still reverts the whole field either way.
 
 You can bring your own OpenAI-compatible API key (BYOK, completely free — works with
 OpenAI, DeepSeek, Gemini's OpenAI-compatible endpoint, and more), or connect an Imp

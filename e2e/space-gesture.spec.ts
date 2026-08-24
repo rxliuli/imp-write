@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures'
-import { configureMockProvider, getMockRequests } from './helpers'
+import { configureMockProvider, enableSpaceGestureForTest, getMockRequests } from './helpers'
 
 // Same rationale as e2e/idle-trigger.spec.ts: the gesture only arms on real
 // keystrokes (`insertText` input events with `data === ' '`) — pressSequentially
@@ -17,6 +17,13 @@ test('three real spaces at the end of a field summons the command menu', async (
   baseURL,
 }) => {
   await configureMockProvider(context, baseURL)
+  // Desktop Chromium (what Playwright always launches — see
+  // e2e/fixtures.ts) never satisfies `isSpaceGestureEnabled`'s mobile
+  // check on its own; this test-only override (see lib/testHooks.ts) is
+  // what lets the gesture actually fire here. The one deliberate exception
+  // is the "disabled by default on desktop" negative case below, which
+  // omits this call on purpose.
+  await enableSpaceGestureForTest(context)
   const page = await context.newPage()
   await page.goto(baseURL)
 
@@ -40,6 +47,13 @@ test('picking a command from the gesture menu runs it and strips the trailing ge
   baseURL,
 }) => {
   await configureMockProvider(context, baseURL)
+  // Desktop Chromium (what Playwright always launches — see
+  // e2e/fixtures.ts) never satisfies `isSpaceGestureEnabled`'s mobile
+  // check on its own; this test-only override (see lib/testHooks.ts) is
+  // what lets the gesture actually fire here. The one deliberate exception
+  // is the "disabled by default on desktop" negative case below, which
+  // omits this call on purpose.
+  await enableSpaceGestureForTest(context)
   const page = await context.newPage()
   await page.goto(baseURL)
 
@@ -69,6 +83,13 @@ test('continuing to type after the gesture menu opens closes it without running 
   baseURL,
 }) => {
   await configureMockProvider(context, baseURL)
+  // Desktop Chromium (what Playwright always launches — see
+  // e2e/fixtures.ts) never satisfies `isSpaceGestureEnabled`'s mobile
+  // check on its own; this test-only override (see lib/testHooks.ts) is
+  // what lets the gesture actually fire here. The one deliberate exception
+  // is the "disabled by default on desktop" negative case below, which
+  // omits this call on purpose.
+  await enableSpaceGestureForTest(context)
   const page = await context.newPage()
   await page.goto(baseURL)
 
@@ -92,6 +113,13 @@ test('three spaces in an otherwise-empty field does not summon the menu', async 
   baseURL,
 }) => {
   await configureMockProvider(context, baseURL)
+  // Desktop Chromium (what Playwright always launches — see
+  // e2e/fixtures.ts) never satisfies `isSpaceGestureEnabled`'s mobile
+  // check on its own; this test-only override (see lib/testHooks.ts) is
+  // what lets the gesture actually fire here. The one deliberate exception
+  // is the "disabled by default on desktop" negative case below, which
+  // omits this call on purpose.
+  await enableSpaceGestureForTest(context)
   const page = await context.newPage()
   await page.goto(baseURL)
 
@@ -108,6 +136,13 @@ test('clicking outside the gesture menu closes it without running anything (regr
   baseURL,
 }) => {
   await configureMockProvider(context, baseURL)
+  // Desktop Chromium (what Playwright always launches — see
+  // e2e/fixtures.ts) never satisfies `isSpaceGestureEnabled`'s mobile
+  // check on its own; this test-only override (see lib/testHooks.ts) is
+  // what lets the gesture actually fire here. The one deliberate exception
+  // is the "disabled by default on desktop" negative case below, which
+  // omits this call on purpose.
+  await enableSpaceGestureForTest(context)
   const page = await context.newPage()
   await page.goto(baseURL)
 
@@ -130,6 +165,13 @@ test('using a command moves it to the front the next time any command menu opens
   baseURL,
 }) => {
   await configureMockProvider(context, baseURL)
+  // Desktop Chromium (what Playwright always launches — see
+  // e2e/fixtures.ts) never satisfies `isSpaceGestureEnabled`'s mobile
+  // check on its own; this test-only override (see lib/testHooks.ts) is
+  // what lets the gesture actually fire here. The one deliberate exception
+  // is the "disabled by default on desktop" negative case below, which
+  // omits this call on purpose.
+  await enableSpaceGestureForTest(context)
   const page = await context.newPage()
   await page.goto(baseURL)
 
@@ -168,6 +210,13 @@ test('a command token right before the gesture does not let the idle-pause trigg
   baseURL,
 }) => {
   await configureMockProvider(context, baseURL)
+  // Desktop Chromium (what Playwright always launches — see
+  // e2e/fixtures.ts) never satisfies `isSpaceGestureEnabled`'s mobile
+  // check on its own; this test-only override (see lib/testHooks.ts) is
+  // what lets the gesture actually fire here. The one deliberate exception
+  // is the "disabled by default on desktop" negative case below, which
+  // omits this call on purpose.
+  await enableSpaceGestureForTest(context)
   const page = await context.newPage()
   await page.goto(baseURL)
 
@@ -196,6 +245,13 @@ test('an extra same-rhythm space tap after the gesture menu opens is absorbed, n
   baseURL,
 }) => {
   await configureMockProvider(context, baseURL)
+  // Desktop Chromium (what Playwright always launches — see
+  // e2e/fixtures.ts) never satisfies `isSpaceGestureEnabled`'s mobile
+  // check on its own; this test-only override (see lib/testHooks.ts) is
+  // what lets the gesture actually fire here. The one deliberate exception
+  // is the "disabled by default on desktop" negative case below, which
+  // omits this call on purpose.
+  await enableSpaceGestureForTest(context)
   const page = await context.newPage()
   await page.goto(baseURL)
 
@@ -237,6 +293,13 @@ test('a space typed well after the gesture menu opened (outside the rhythm windo
   baseURL,
 }) => {
   await configureMockProvider(context, baseURL)
+  // Desktop Chromium (what Playwright always launches — see
+  // e2e/fixtures.ts) never satisfies `isSpaceGestureEnabled`'s mobile
+  // check on its own; this test-only override (see lib/testHooks.ts) is
+  // what lets the gesture actually fire here. The one deliberate exception
+  // is the "disabled by default on desktop" negative case below, which
+  // omits this call on purpose.
+  await enableSpaceGestureForTest(context)
   const page = await context.newPage()
   await page.goto(baseURL)
 
@@ -264,6 +327,13 @@ test('several extra same-rhythm space taps in a row are all absorbed', async ({
   baseURL,
 }) => {
   await configureMockProvider(context, baseURL)
+  // Desktop Chromium (what Playwright always launches — see
+  // e2e/fixtures.ts) never satisfies `isSpaceGestureEnabled`'s mobile
+  // check on its own; this test-only override (see lib/testHooks.ts) is
+  // what lets the gesture actually fire here. The one deliberate exception
+  // is the "disabled by default on desktop" negative case below, which
+  // omits this call on purpose.
+  await enableSpaceGestureForTest(context)
   const page = await context.newPage()
   await page.goto(baseURL)
 
@@ -287,4 +357,30 @@ test('several extra same-rhythm space taps in a row are all absorbed', async ({
   const content: string = requests[0]!.body.messages[0].content
   expect(content.endsWith('hello world')).toBe(true)
   expect(content).not.toMatch(/ $/)
+})
+
+// Regression/negative case for the platform gate itself
+// (`isSpaceGestureEnabled` — see lib/spaceGestureDetector.ts): deliberately
+// does *not* call `enableSpaceGestureForTest`, so this exercises the exact
+// production default on desktop Chromium. Markdown authors routinely type
+// 3+ consecutive spaces (indenting a code block) without ever meaning to
+// summon a command menu — this is why the gesture is mobile-only at all.
+test('three real spaces does not summon the command menu on desktop by default (no test override)', async ({
+  context,
+  baseURL,
+}) => {
+  await configureMockProvider(context, baseURL)
+  const page = await context.newPage()
+  await page.goto(baseURL)
+
+  const ta = page.locator('#ta')
+  await ta.click()
+  await ta.pressSequentially('hello world', { delay: 20 })
+  await ta.pressSequentially('   ', { delay: 20 })
+
+  await page.waitForTimeout(500)
+  await expect(page.locator(MENU_HOST)).toHaveCount(0)
+  expect(await ta.inputValue()).toBe('hello world   ')
+  const { count } = await getMockRequests(baseURL)
+  expect(count).toBe(0)
 })

@@ -477,3 +477,33 @@ export function shouldAbsorbGestureMenuInput(
   }
   return { state: { residueLen: state.residueLen + 1, lastTime: now }, absorb: true }
 }
+
+/**
+ * Whether the three-tap space gesture should be wired up at all — decided
+ * once, at content-script init (see entrypoints/content.ts's
+ * `setupSpaceGesture`). Pure so the actual gating logic (not the async
+ * platform/storage lookups feeding it — `browser.runtime.getPlatformInfo`
+ * and `lib/testHooks.ts`'s `getSpaceGestureTestOverride`) is independently
+ * unit-testable.
+ *
+ * Deliberately mobile-only in production: desktop already has three other
+ * ways to trigger a command (the `/token` idle pause, the right-click
+ * menu, and keyboard shortcuts), none of which have this gesture's
+ * false-positive risk — writing Markdown with space-indented code blocks
+ * on desktop routinely types 3+ consecutive spaces, which would otherwise
+ * pop the command menu open constantly while typing completely unrelated
+ * content. Mobile has no keyboard shortcuts and an unreliable-to-absent
+ * right-click context menu, so the gesture (alongside the toolbar-icon
+ * tap) fills a real gap there instead of duplicating an already-good
+ * desktop path.
+ *
+ * `testOverride` exists solely so Playwright's e2e harness — which only
+ * ever runs desktop Chromium, never a real mobile browser — can still
+ * exercise this path end-to-end; see `lib/testHooks.ts`'s doc comment for
+ * the full rationale. `isMobile || testOverride`: either one on its own is
+ * sufficient, and the override never *disables* the gesture on an actually
+ * mobile platform.
+ */
+export function isSpaceGestureEnabled(isMobile: boolean, testOverride: boolean): boolean {
+  return isMobile || testOverride
+}

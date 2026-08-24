@@ -1,6 +1,7 @@
 import type { BrowserContext } from '@playwright/test'
 import { BUILTIN_COMMANDS } from '../lib/commands'
 import type { Command } from '../lib/settings'
+import { SPACE_GESTURE_TEST_OVERRIDE_KEY } from '../lib/testHooks'
 
 export async function getServiceWorker(context: BrowserContext) {
   let [sw] = context.serviceWorkers()
@@ -158,4 +159,26 @@ export async function setMockFail(
  */
 export async function resetMock(baseURL: string): Promise<void> {
   await fetch(`${baseURL}/mock/reset`, { method: 'POST' })
+}
+
+/**
+ * Sets the test-only override that makes the three-tap space gesture
+ * (`lib/spaceGestureDetector.ts`'s `isSpaceGestureEnabled`) behave as if
+ * this were a mobile platform — Playwright's `context` fixture (see
+ * `e2e/fixtures.ts`) always launches desktop Chromium, and the gesture is
+ * deliberately mobile-only in production (see that function's doc
+ * comment), so without this override `e2e/space-gesture.spec.ts` would
+ * have no way to exercise the gesture path at all. Writes directly to the
+ * same `browser.storage.local` the extension itself reads
+ * (`lib/testHooks.ts`'s `getSpaceGestureTestOverride`), via the same
+ * `serviceWorker.evaluate` mechanism `configureMockProvider` above uses for
+ * the real `settings` blob — the key itself is imported from
+ * `lib/testHooks.ts` rather than duplicated as a literal string here, so
+ * the two sides can never drift apart.
+ */
+export async function enableSpaceGestureForTest(context: BrowserContext): Promise<void> {
+  const sw = await getServiceWorker(context)
+  await sw.evaluate(async (key) => {
+    await chrome.storage.local.set({ [key]: true })
+  }, SPACE_GESTURE_TEST_OVERRIDE_KEY)
 }

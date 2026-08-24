@@ -908,32 +908,10 @@ describe('shouldAbsorbGestureMenuInput', () => {
 })
 
 describe('isSpaceGestureEnabled', () => {
-  it('is enabled on a mobile platform regardless of the test override', () => {
-    expect(isSpaceGestureEnabled(true, false)).toBe(true)
-    expect(isSpaceGestureEnabled(true, true)).toBe(true)
-  })
-
-  // The harness runs with `import.meta.env.DEV === true`, which arms the
-  // gesture on desktop too — this is what lets a `wxt dev` build summon it
-  // on desktop for the mobile-only UI work. The *production*-desktop-disabled
-  // guarantee is asserted by the e2e "no test override" case, which runs
-  // against the prod build (`import.meta.env.DEV` replaced with `false`).
-  it('is enabled on a non-mobile platform in DEV', () => {
-    expect(isSpaceGestureEnabled(false, false)).toBe(true)
-  })
-
-  it('the test override alone is sufficient to enable it on a non-mobile platform', () => {
-    expect(isSpaceGestureEnabled(false, true)).toBe(true)
-  })
-
-  // The override/DEV can only ever turn the gesture *on* — neither must be
-  // able to turn it *off* for an actually-mobile platform (there would be
-  // no legitimate reason to, and a bug making it possible would be a
-  // production behavior change hiding behind what's supposed to be an
-  // inert, test-only flag).
-  it('is a pure OR — there is no combination that disables it on mobile', () => {
-    for (const testOverride of [false, true]) {
-      expect(isSpaceGestureEnabled(true, testOverride)).toBe(true)
-    }
+  // The gesture is no longer mobile-only — it's enabled on desktop and
+  // mobile alike, with no platform gate (see the function's doc comment).
+  // This guards against anyone re-introducing a gate.
+  it('is always enabled (no platform gate anymore)', () => {
+    expect(isSpaceGestureEnabled()).toBe(true)
   })
 })

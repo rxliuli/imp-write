@@ -367,13 +367,12 @@ test('several extra same-rhythm space taps in a row are all absorbed', async ({
   expect(content).not.toMatch(/ $/)
 })
 
-// Regression/negative case for the platform gate itself
-// (`isSpaceGestureEnabled` — see lib/spaceGestureDetector.ts): deliberately
-// does *not* call `enableSpaceGestureForTest`, so this exercises the exact
-// production default on desktop Chromium. Markdown authors routinely type
-// 3+ consecutive spaces (indenting a code block) without ever meaning to
-// summon a command menu — this is why the gesture is mobile-only at all.
-test('three real spaces does not summon the command menu on desktop by default (no test override)', async ({
+// The three-tap gesture is un-gated now (works on desktop & mobile alike) —
+// deliberately does *not* call `enableSpaceGestureForTest`, proving three
+// real spaces summon the command menu on plain desktop with no platform
+// gate or test override. Guards against anyone re-introducing a mobile-only
+// gate (see `isSpaceGestureEnabled` in lib/spaceGestureDetector.ts).
+test('three real spaces summons the command menu on desktop with no test override (gesture is un-gated)', async ({
   context,
   baseURL,
 }) => {
@@ -386,8 +385,7 @@ test('three real spaces does not summon the command menu on desktop by default (
   await ta.pressSequentially('hello world', { delay: 20 })
   await ta.pressSequentially('   ', { delay: 20 })
 
-  await page.waitForTimeout(500)
-  await expect(page.locator(MENU_HOST)).toHaveCount(0)
+  await expect(page.locator(MENU_HOST)).toBeVisible()
   expect(await ta.inputValue()).toBe('hello world   ')
   const { count } = await getMockRequests(baseURL)
   expect(count).toBe(0)

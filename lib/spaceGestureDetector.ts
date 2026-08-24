@@ -513,14 +513,12 @@ export function shouldAbsorbGestureMenuInput(
  * the full rationale. `isMobile || testOverride ∥ import.meta.env.DEV`:
  * any one on its own is sufficient, and neither the override nor DEV ever
  * *disables* the gesture on an actually-mobile platform.
- *
- * The DEV arm is what lets a `wxt dev` build (where `import.meta.env.DEV`
- * is `true`) summon the gesture on desktop too, so the mobile-only UI work
- * (4-row command cap, header Settings gear) can be exercised in a desktop
- * dev build without having to fake a platform. It's a no-op in a production
- * build, where Vite replaces `import.meta.env.DEV` with `false` and the
- * whole arm is dead-code-eliminated.
  */
-export function isSpaceGestureEnabled(isMobile: boolean, testOverride: boolean): boolean {
-  return isMobile || testOverride || import.meta.env.DEV
+export function isSpaceGestureEnabled(): boolean {
+  // The three-tap gesture is now enabled on desktop AND mobile alike — the
+  // old mobile-only gate (and its DEV/test-override escapes) is gone, so
+  // this always returns true. Kept as a function so `setupSpaceGesture`'s
+  // call site reads the same and a future opt-out has one place to live;
+  // the platform/testOverride params that used to feed it were dropped.
+  return true
 }

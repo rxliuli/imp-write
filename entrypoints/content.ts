@@ -24,14 +24,12 @@ import { DEFAULT_SETTINGS, getSettings, type Command, type Settings } from '@/li
 import { gestureDebug, initGestureDebug } from '@/lib/gestureDebug'
 import {
   INITIAL_SPACE_GESTURE_STATE,
-  isSpaceGestureEnabled,
   reduceSpaceGesture,
   shouldAbsorbGestureMenuInput,
   stripTrailingGestureResidue,
   type GestureMenuResidueState,
   type SpaceGestureState,
 } from '@/lib/spaceGestureDetector'
-import { getSpaceGestureTestOverride } from '@/lib/testHooks'
 
 // Created lazily, on first actual use, so pages that never trigger a command
 // don't get an `InputLoader` instance injecting its <style> tag into
@@ -517,30 +515,25 @@ export default defineContentScript({
       commandMenu.show(element, sorted, { anchorMode: isMobile ? 'element' : 'caret' })
     }
 
-    // Three-real-space-in-a-row gesture: the mobile-only counterpart to the
-    // toolbar-icon tap for summoning the floating command menu — see
-    // `isSpaceGestureEnabled`'s doc comment for why this is gated to mobile
-    // rather than every platform: desktop already has three other trigger
-    // paths (idle-pause `/token`, the right-click menu, keyboard
-    // shortcuts), and space-indented Markdown would otherwise pop the menu
-    // open constantly while typing completely unrelated content. Wrapped in
-    // its own async setup function (rather than inline in `main`) purely so
-    // this platform/test-override check can gate *whether the listeners
+    // Three-real-space-in-a-row gesture: the counterpart to the
+    // toolbar-icon tap for summoning the floating command menu. It used to
+    // be mobile-only (see the `isSpaceGestureEnabled` history) but now fires
+    // on every platform — desktop already has the idle-pause `/token`,
+    // right-click, and shortcut triggers too, and the gesture is a fourth
+    // quick path. Wrapped in its own async setup function (rather than
+    // inline in `main`) purely so the listeners below are attached once,
+    // after platform info is resolved.
     // below are ever attached at all* — on a disabled platform,
     // `reduceSpaceGesture` is never even called, not just "called but
     // ignored".
     async function setupSpaceGesture() {
-      const [isMobile, testOverride] = await Promise.all([
-        isMobilePlatform(),
-        getSpaceGestureTestOverride(),
-      ])
-      gestureDebug('setupSpaceGesture gate', {
+      const [isMobile] = await Promise.all([isMobilePlatform()])
+      // The three-tap gesture is armed on every platform now (the
+      // mobile-only gate is gone) — set up the listeners unconditionally.
+      gestureDebug('setupSpaceGesture: arming listeners', {
         isMobile,
-        testOverride,
         dev: import.meta.env.DEV,
-        enabled: isSpaceGestureEnabled(isMobile, testOverride),
       })
-      if (!isSpaceGestureEnabled(isMobile, testOverride)) return
 
       // `reduceSpaceGesture` (lib/spaceGestureDetector.ts) is a pure
       // function — this is its DOM wiring, kept inline (not its own class)
@@ -556,6 +549,7 @@ export default defineContentScript({
         'input',
         (e) => {
           if (!(e instanceof InputEvent)) {
+            gestureDebug('input: non-InputEvent (reset)')
             spaceGestureState = INITIAL_SPACE_GESTURE_STATE
             return
           }
@@ -610,6 +604,9 @@ export default defineContentScript({
         true,
       )
     }
+    // Content-script entry point — proving the script even injected is the
+    // first thing to check if a platform shows no gesture logs at all.
+    console.log('[imp-write] content script loaded on', location.href)
     void initGestureDebug()
     void setupSpaceGesture()
 

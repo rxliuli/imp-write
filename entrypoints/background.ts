@@ -201,6 +201,11 @@ export default defineBackground(() => {
     }
     try {
       const res = await fetch(`${imp.baseUrl}/me`, {
+        // Explicitly exclude the browser's session cookie — the status check
+        // must reflect the KEY only. `/me` accepts session-OR-key, so a
+        // logged-in user's cookie would otherwise make a revoked key still
+        // return 200 and the badge show "Connected" while real requests 401.
+        credentials: 'omit',
         headers: { authorization: `Bearer ${imp.apiKey}` },
       })
       if (res.status === 401) return { ok: false, error: 'unauthorized' } as const

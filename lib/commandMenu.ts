@@ -56,6 +56,22 @@ export interface Size {
   height: number
 }
 
+/**
+ * The visible viewport `computeMenuPosition` positions and clamps against —
+ * `left`/`top` are that viewport's own origin, in the same coordinate space
+ * `getBoundingClientRect()` (and therefore `anchorRect`) already uses. Lets
+ * callers pass `window.visualViewport`'s box (`offsetLeft`/`offsetTop` are
+ * non-zero once an on-screen keyboard has shifted or pinch-zoom has panned
+ * it) instead of always assuming the viewport starts at `(0, 0)` — see
+ * `CommandMenu.position`'s call site.
+ */
+export interface ViewportBox {
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
 /** Whether `rect` has any on-screen extent within `viewport` — used to fall back to a centered placement when the anchor is scrolled out of view. */
 export function isRectVisible(rect: SimpleRect, viewport: Size): boolean {
   return (
@@ -67,6 +83,11 @@ export function isRectVisible(rect: SimpleRect, viewport: Size): boolean {
     rect.left < viewport.width
   )
 }
+
+// Shared with `CommandMenu.position`'s max-height calc (`viewport.height -
+// DEFAULT_MENU_MARGIN * 2`) so the menu's height cap and its position
+// clamping agree on the same edge margin.
+const DEFAULT_MENU_MARGIN = 8
 
 /**
  * Picks a `position: fixed` top/left for the menu, clamped so it never
@@ -85,38 +106,49 @@ export function isRectVisible(rect: SimpleRect, viewport: Size): boolean {
  *   caret-anchored desktop menu (`anchorRect` is a thin rect at the text
  *   cursor), matching the decided UX: the menu drops down from the cursor
  *   like a native autocomplete popup.
+ *
+ * `viewport` is a box, not just a size — both the placement math and the
+ * edge clamping are relative to its `left`/`top`, not hard-coded to `(0,
+ * 0)`. This lets the caller pass `window.visualViewport`'s own box (see
+ * `ViewportBox`'s doc comment) so the menu still lands somewhere visible
+ * once an on-screen keyboard has shifted it away from `(0, 0)`.
  */
 export function computeMenuPosition(
   anchorRect: SimpleRect | null,
   menuSize: Size,
-  viewport: Size,
+  viewport: ViewportBox,
   options: { margin?: number; gap?: number; preferAbove?: boolean } = {},
 ): { top: number; left: number } {
-  const margin = options.margin ?? 8
+  const margin = options.margin ?? DEFAULT_MENU_MARGIN
   const gap = options.gap ?? 8
   const preferAbove = options.preferAbove ?? true
 
+  const viewportLeft = viewport.left + margin
+  const viewportRight = viewport.left + viewport.width - margin
+  const viewportTop = viewport.top + margin
+  const viewportBottom = viewport.top + viewport.height - margin
+
   if (!anchorRect) {
     return {
-      left: Math.max(margin, (viewport.width - menuSize.width) / 2),
-      top: Math.max(margin, viewport.height - margin - menuSize.height),
+      left: Math.max(viewportLeft, viewport.left + (viewport.width - menuSize.width) / 2),
+      top: Math.max(viewportTop, viewportBottom - menuSize.height),
     }
   }
 
   let left = anchorRect.left
-  left = Math.min(left, viewport.width - margin - menuSize.width)
-  left = Math.max(left, margin)
+  left = Math.min(left, viewportRight - menuSize.width)
+  left = Math.max(left, viewportLeft)
 
   const above = anchorRect.top - gap - menuSize.height
   const below = anchorRect.bottom + gap
-  const belowFits = below + menuSize.height <= viewport.height - margin
-  const clampedToBottom = Math.max(margin, viewport.height - margin - menuSize.height)
+  const belowFits = below + menuSize.height <= viewportBottom
+  const clampedToBottom = Math.max(viewportTop, viewportBottom - menuSize.height)
 
   let top: number
   if (preferAbove) {
-    top = above >= margin ? above : belowFits ? below : clampedToBottom
+    top = above >= viewportTop ? above : belowFits ? below : clampedToBottom
   } else {
-    top = belowFits ? below : above >= margin ? above : clampedToBottom
+    top = belowFits ? below : above >= viewportTop ? above : clampedToBottom
   }
 
   return { top, left }
@@ -173,6 +205,7 @@ const MENU_STYLES = `
     flex-direction: column;
   }
   .imp-write-menu-title {
+    flex-shrink: 0;
     padding: 10px 14px;
     font-size: 12px;
     font-weight: 600;
@@ -180,6 +213,21 @@ const MENU_STYLES = `
     text-transform: uppercase;
     color: var(--imp-menu-muted-fg);
     border-bottom: 1px solid var(--imp-menu-divider);
+  }
+  /* The scrollable command list. min-height: 0 overrides flexbox's default
+     min-height: auto, which would otherwise keep this item at its content
+     height and stop .imp-write-menu's max-height (set inline by
+     CommandMenu.position) from ever forcing it to actually scroll.
+     overscroll-behavior: contain stops an overscroll at the top/bottom
+     edge from chaining into a scroll of the host page — which would
+     otherwise immediately close the menu via the window scroll listener
+     below. */
+  .imp-write-menu-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
   }
   .imp-write-menu-empty {
     padding: 14px;
@@ -201,6 +249,13 @@ const MENU_STYLES = `
   .imp-write-menu-item:hover,
   .imp-write-menu-item:active {
     background: var(--imp-menu-hover-bg);
+  }
+  /* Pinned below .imp-write-menu-list rather than scrolling with it —
+     flex-shrink: 0 keeps it at its content height regardless of how much
+     .imp-write-menu-list above it gets compressed, so Settings stays
+     reachable no matter how long the command list is. */
+  .imp-write-menu-footer {
+    flex-shrink: 0;
   }
   .imp-write-menu-divider {
     height: 1px;
@@ -257,12 +312,30 @@ export interface ShowCommandMenuOptions {
   anchorMode?: 'caret' | 'element'
 }
 
+/**
+ * The box `CommandMenu.position` sizes and positions itself against.
+ * `window.visualViewport` (unlike `window.innerWidth`/`innerHeight`, and
+ * unlike `100vh` in CSS) tracks the actually-visible area once an on-screen
+ * keyboard has shrunk it — the layout viewport those alternatives measure
+ * stays the page's full, unobscured size, which is exactly what makes a
+ * `position: fixed` element sized/placed against it end up rendered behind
+ * the keyboard. Falls back to `innerWidth`/`innerHeight` at `(0, 0)` on
+ * engines without `visualViewport` support.
+ */
+function getViewportBox(): ViewportBox {
+  const vv = window.visualViewport
+  if (vv) {
+    return { left: vv.offsetLeft, top: vv.offsetTop, width: vv.width, height: vv.height }
+  }
+  return { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight }
+}
+
 export class CommandMenu {
   private host: HTMLElement | null = null
   private shadow: ShadowRoot | null = null
   private outsideClickHandler: ((e: Event) => void) | null = null
   private keydownHandler: ((e: KeyboardEvent) => void) | null = null
-  private dismissHandler: (() => void) | null = null
+  private dismissHandler: ((e: Event) => void) | null = null
   private target: HTMLElement | null = null
   private targetInputHandler: ((e: Event) => void) | null = null
 
@@ -320,9 +393,15 @@ export class CommandMenu {
     document.addEventListener('keydown', this.keydownHandler, true)
 
     // The menu is a one-shot placement (like lib/hint.ts's toast) — rather
-    // than tracking the anchor's position through a scroll, just close it;
-    // native context menus behave the same way.
-    this.dismissHandler = () => this.destroy()
+    // than tracking the anchor's position through a scroll of the page, just
+    // close it; native context menus behave the same way. Scrolling inside
+    // the menu's own `.imp-write-menu-list` must not count as "the page
+    // scrolled" though — `composedPath()` distinguishes the two by checking
+    // whether the scroll originated somewhere inside `host`.
+    this.dismissHandler = (e: Event) => {
+      if (e.composedPath().includes(host)) return
+      this.destroy()
+    }
     window.addEventListener('scroll', this.dismissHandler, true)
     window.addEventListener('resize', this.dismissHandler)
 
@@ -383,11 +462,17 @@ export class CommandMenu {
     title.textContent = 'Imp Write'
     menu.appendChild(title)
 
+    // The only part of the menu that scrolls — commands live here, Settings
+    // (below) is pinned outside it. See `.imp-write-menu-list`'s CSS comment
+    // for why this needs `min-height: 0` to actually scroll under a
+    // `max-height`-clamped `.imp-write-menu`.
+    const list = document.createElement('div')
+    list.className = 'imp-write-menu-list'
     if (commands.length === 0) {
       const empty = document.createElement('div')
       empty.className = 'imp-write-menu-empty'
       empty.textContent = 'No commands configured yet.'
-      menu.appendChild(empty)
+      list.appendChild(empty)
     } else {
       for (const command of commands) {
         const item = document.createElement('button')
@@ -398,13 +483,17 @@ export class CommandMenu {
           this.destroy()
           this.callbacks.onSelect(target, command)
         })
-        menu.appendChild(item)
+        list.appendChild(item)
       }
     }
+    menu.appendChild(list)
+
+    const footer = document.createElement('div')
+    footer.className = 'imp-write-menu-footer'
 
     const divider = document.createElement('div')
     divider.className = 'imp-write-menu-divider'
-    menu.appendChild(divider)
+    footer.appendChild(divider)
 
     const settings = document.createElement('button')
     settings.type = 'button'
@@ -414,16 +503,31 @@ export class CommandMenu {
       this.destroy()
       this.callbacks.onOpenSettings()
     })
-    menu.appendChild(settings)
+    footer.appendChild(settings)
+
+    menu.appendChild(footer)
 
     return menu
   }
 
   private position(target: HTMLElement, anchorMode: 'caret' | 'element'): void {
     if (!this.host) return
-    const viewport = { width: window.innerWidth, height: window.innerHeight }
+    const viewport = getViewportBox()
+
+    // Capped to the *visible* viewport (see `getViewportBox`'s doc comment),
+    // not the menu's natural content height — set before measuring
+    // `menuRect` below so a long command list is already clamped (and thus
+    // scrollable — see `.imp-write-menu-list`'s CSS) by the time its
+    // on-screen size is read for positioning.
+    const menuEl = this.shadow?.querySelector<HTMLElement>('.imp-write-menu')
+    if (menuEl) {
+      menuEl.style.maxHeight = `${Math.max(0, viewport.height - DEFAULT_MENU_MARGIN * 2)}px`
+    }
+
     const rect = this.computeAnchorRect(target, anchorMode)
-    const anchor = isRectVisible(rect, viewport) ? rect : null
+    const anchor = isRectVisible(rect, { width: viewport.width, height: viewport.height })
+      ? rect
+      : null
     const menuRect = this.host.getBoundingClientRect()
     const { top, left } = computeMenuPosition(
       anchor,

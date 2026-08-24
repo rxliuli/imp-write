@@ -200,7 +200,7 @@ export function ProviderSection({
                     }
                   }}
                   placeholder="sk-..."
-                  className="pr-9 font-mono text-xs"
+                  className="pr-9 font-mono text-base md:text-xs"
                 />
                 <Button
                   type="button"

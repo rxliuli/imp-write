@@ -1,5 +1,6 @@
 import { test, expect } from './fixtures'
 import { configureMockProvider, enableSpaceGestureForTest, getMockRequests } from './helpers'
+import type { Command } from '../lib/settings'
 
 // Same rationale as e2e/idle-trigger.spec.ts: the gesture only arms on real
 // keystrokes (`insertText` input events with `data === ' '`) — pressSequentially
@@ -11,6 +12,8 @@ const MENU_HOST = '#imp-write-command-menu-host'
 // so this reaches the buttons `lib/commandMenu.ts` renders inside its
 // `attachShadow({ mode: 'open' })` root without any extra chaining.
 const FIX_BUTTON = `${MENU_HOST} button:text-is("/fix")`
+const MENU_LIST = `${MENU_HOST} .imp-write-menu-list`
+const SETTINGS_BUTTON = `${MENU_HOST} button:text-is("⚙ Settings")`
 
 test('three real spaces at the end of a field summons the command menu', async ({
   context,
@@ -383,4 +386,54 @@ test('three real spaces does not summon the command menu on desktop by default (
   expect(await ta.inputValue()).toBe('hello world   ')
   const { count } = await getMockRequests(baseURL)
   expect(count).toBe(0)
+})
+
+// Usability regression for a menu with dozens of commands (lib/commandMenu.ts's
+// `.imp-write-menu-list`): before this, the menu had no max-height and no
+// internal scroll area, so a long command list ran off the bottom of the
+// viewport — the trailing commands and the Settings entry were simply
+// unreachable. It also relied on a capture-phase `window` scroll listener to
+// dismiss the menu, which (pre-fix) would close it the moment the list
+// itself was scrolled.
+test('with dozens of commands, the menu stays usable: Settings stays reachable and scrolling the list does not close it', async ({
+  context,
+  baseURL,
+}) => {
+  const manyCommands: Command[] = Array.from({ length: 30 }, (_, i) => ({
+    name: `cmd${i}`,
+    prompt: `Do something with {{text}} (${i})`,
+  }))
+  await configureMockProvider(context, baseURL, { commands: manyCommands })
+  // See the other scenarios' identical comment above — this override is
+  // what lets the gesture fire on Playwright's desktop Chromium at all.
+  await enableSpaceGestureForTest(context)
+  const page = await context.newPage()
+  await page.goto(baseURL)
+
+  const ta = page.locator('#ta')
+  await ta.click()
+  await ta.pressSequentially('hello world', { delay: 20 })
+  await ta.pressSequentially('   ', { delay: 20 })
+
+  const menuHost = page.locator(MENU_HOST)
+  await expect(menuHost).toBeVisible()
+
+  // The Settings row is pinned in a non-scrolling footer, so it stays
+  // within the viewport regardless of how long the command list above it
+  // is — never pushed off past the bottom of the screen.
+  const settingsButton = page.locator(SETTINGS_BUTTON)
+  await expect(settingsButton).toBeVisible()
+  const viewport = page.viewportSize()!
+  const settingsBox = (await settingsButton.boundingBox())!
+  expect(settingsBox.y).toBeGreaterThanOrEqual(0)
+  expect(settingsBox.y + settingsBox.height).toBeLessThanOrEqual(viewport.height)
+
+  // Scrolling inside the command list must not dismiss the menu. Polled
+  // rather than read once — the wheel event's resulting scroll isn't
+  // guaranteed to have landed by the time `mouse.wheel` resolves.
+  const list = page.locator(MENU_LIST)
+  await list.hover()
+  await page.mouse.wheel(0, 400)
+  await expect.poll(() => list.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
+  await expect(menuHost).toBeVisible()
 })

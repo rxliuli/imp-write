@@ -29,6 +29,19 @@ function getMenuButtons(): HTMLButtonElement[] {
   return Array.from(host.shadowRoot.querySelectorAll('button'))
 }
 
+function getMenuListEl(): HTMLElement | null {
+  const host = getMenuHost()
+  if (!host?.shadowRoot) return null
+  return host.shadowRoot.querySelector('.imp-write-menu-list')
+}
+
+function makeCommands(count: number): Command[] {
+  return Array.from({ length: count }, (_, i) => ({
+    name: `cmd${i}`,
+    prompt: `Do something {{text}} ${i}`,
+  }))
+}
+
 describe('isFreshTarget', () => {
   let element: HTMLElement
 
@@ -111,7 +124,7 @@ describe('isRectVisible', () => {
 })
 
 describe('computeMenuPosition', () => {
-  const viewport = { width: 400, height: 800 }
+  const viewport = { left: 0, top: 0, width: 400, height: 800 }
   const menuSize = { width: 200, height: 150 }
 
   it('centers near the bottom of the viewport when there is no anchor rect', () => {
@@ -212,6 +225,46 @@ describe('computeMenuPosition', () => {
     }
     const { top } = computeMenuPosition(anchor, menuSize, viewport, { preferAbove: false })
     expect(top).toBe(anchor.top - 8 - menuSize.height)
+  })
+
+  // `viewport.left`/`viewport.top` non-zero — e.g. `window.visualViewport`'s
+  // own box once pinch-zoom/an on-screen keyboard has panned it away from
+  // `(0, 0)` (see `getViewportBox`). Every clamp and fallback below is
+  // relative to that offset, not hard-coded to the document's own origin.
+  it('offsets the no-anchor fallback placement by a non-zero viewport box origin', () => {
+    const offsetViewport = { left: 40, top: 60, width: 400, height: 800 }
+    const { top, left } = computeMenuPosition(null, menuSize, offsetViewport)
+    expect(left).toBeCloseTo(offsetViewport.left + (offsetViewport.width - menuSize.width) / 2)
+    expect(top).toBe(offsetViewport.top + offsetViewport.height - 8 - menuSize.height)
+  })
+
+  it('clamps left against a non-zero viewport box origin\'s own right edge', () => {
+    const offsetViewport = { left: 40, top: 60, width: 400, height: 800 }
+    const anchor = {
+      top: offsetViewport.top + 400,
+      left: offsetViewport.left + 350,
+      right: offsetViewport.left + 380,
+      bottom: offsetViewport.top + 430,
+      width: 30,
+      height: 30,
+    }
+    const { left } = computeMenuPosition(anchor, menuSize, offsetViewport)
+    expect(left).toBe(offsetViewport.left + offsetViewport.width - 8 - menuSize.width)
+  })
+
+  it('clamps top against a non-zero viewport box origin\'s own bottom edge', () => {
+    const offsetViewport = { left: 0, top: 100, width: 400, height: 400 }
+    const tallMenu = { width: 200, height: 350 }
+    const anchor = {
+      top: offsetViewport.top + 200,
+      left: 50,
+      right: 150,
+      bottom: offsetViewport.top + 230,
+      width: 100,
+      height: 30,
+    }
+    const { top } = computeMenuPosition(anchor, tallMenu, offsetViewport)
+    expect(top).toBe(offsetViewport.top + offsetViewport.height - 8 - tallMenu.height)
   })
 })
 
@@ -337,6 +390,68 @@ describe('CommandMenu', () => {
     window.dispatchEvent(new Event('scroll'))
 
     expect(getMenuHost()).toBeNull()
+  })
+
+  // A scroll dispatched directly on `window`/`document` (rather than on
+  // something inside the menu's own shadow tree) is exactly what a real
+  // page scroll looks like — `composedPath()` never includes the menu host
+  // for this, so it must still close the menu even while the command list
+  // is scrollable (regression guard against the composedPath check in
+  // `dismissHandler` swallowing more than just its own internal scrolls).
+  it('closes on scroll even with a long, scrollable command list open', () => {
+    menu.show(target, makeCommands(30))
+    expect(getMenuHost()).not.toBeNull()
+
+    window.dispatchEvent(new Event('scroll'))
+
+    expect(getMenuHost()).toBeNull()
+  })
+
+  // Regression: scrolling `.imp-write-menu-list` itself must not be treated
+  // like a page scroll — `dismissHandler` checks `composedPath()` for the
+  // menu host specifically to distinguish the two. `composed: true` here
+  // stands in for however a given engine's own scroll events propagate
+  // (native scroll events don't bubble and aren't composed in the engine
+  // this suite runs under — see `.imp-write-menu-list`'s CSS comment for
+  // why `overscroll-behavior: contain` is still needed to keep a real page
+  // scroll from ever happening in the first place); this asserts the
+  // listener-side guard holds regardless.
+  it('scrolling inside the menu list does not close it', () => {
+    menu.show(target, makeCommands(30))
+    const list = getMenuListEl()!
+
+    list.dispatchEvent(new Event('scroll', { bubbles: false, composed: true }))
+
+    expect(getMenuHost()).not.toBeNull()
+    expect(menu.isOpen).toBe(true)
+  })
+
+  it('with many commands, the menu stays within the viewport height and the list scrolls internally', () => {
+    menu.show(target, makeCommands(30))
+
+    const viewportHeight = window.visualViewport?.height ?? window.innerHeight
+    const hostRect = getMenuHost()!.getBoundingClientRect()
+    expect(hostRect.height).toBeLessThanOrEqual(viewportHeight)
+
+    const list = getMenuListEl()!
+    expect(list.scrollHeight).toBeGreaterThan(list.clientHeight)
+  })
+
+  it('with many commands, the Settings entry stays pinned within the viewport instead of scrolling out of reach', () => {
+    menu.show(target, makeCommands(30))
+
+    const viewportHeight = window.visualViewport?.height ?? window.innerHeight
+    const settingsButton = getMenuButtons().at(-1)!
+    const settingsRect = settingsButton.getBoundingClientRect()
+    expect(settingsRect.top).toBeGreaterThanOrEqual(0)
+    expect(settingsRect.bottom).toBeLessThanOrEqual(viewportHeight)
+  })
+
+  it('with only a few commands, the list has no scrollbar — layout is unchanged from before', () => {
+    menu.show(target, makeCommands(4))
+
+    const list = getMenuListEl()!
+    expect(list.scrollHeight).toBeLessThanOrEqual(list.clientHeight)
   })
 
   it('a second show() tears down the first — never stacks two menus', () => {

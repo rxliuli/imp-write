@@ -103,7 +103,10 @@ function CommandFormFields({
           value={prompt}
           onChange={(e) => onPromptChange(e.target.value)}
           placeholder={'Rewrite the text below to be more concise.\n\n{{text}}'}
-          className="min-h-40 font-mono text-xs"
+          // Keep the prompt textarea at >=16px on touch (mobile) so iOS
+          // Safari doesn't auto-zoom the page on focus; the smaller mono
+          // size is reserved for desktop where that zoom doesn't apply.
+          className="min-h-40 font-mono text-base md:text-xs"
         />
         <p className="text-xs text-muted-foreground">
           Use <code className="rounded bg-muted px-1">{'{{text}}'}</code>{' '}

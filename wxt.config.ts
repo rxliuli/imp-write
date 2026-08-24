@@ -11,11 +11,14 @@ export default defineConfig({
     analytics: true,
     // Publishing to Safari? Uncomment and fill in your own values —
     // extport.config.json is generated from these at `wxt prepare`.
-    // safari: {
-    //   appCategory: 'public.app-category.productivity',
-    //   bundleIdentifier: 'com.example.your-extension',
-    //   developmentTeam: 'YOUR_TEAM_ID',
-    // },
+    safari: {
+      appCategory: 'public.app-category.productivity',
+      bundleIdentifier: 'com.rxliuli.imp-write',
+      developmentTeam: 'N2X78TUUFG',
+      issuerId: '48f39427-c063-4e33-98d2-31de80aad0be',
+      keyId: '8N27UWG9RG',
+      openProject: true,
+    },
   },
   vite: () => ({
     plugins: [tailwindcss()],

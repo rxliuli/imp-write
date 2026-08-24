@@ -95,6 +95,15 @@ export const SAME_TAP_WINDOW_MS = 100
 // "any punctuation" class, since only these specific characters have been
 // observed in a real substitution trace.
 const PERIOD_CHARS = '.。．'
+// Space characters that count toward the three-tap gesture. A plain ASCII
+// space (U+0020) is the common case, but macOS/Safari with a CJK IME — and
+// some mobile keyboards — insert the ideographic space (U+3000, 全角), and
+// French locales the non-breaking space (U+00A0). input-translator's prior
+// UniversalSpaceDetector recognized all three; imp-write's earlier
+// `data === ' '` only matched U+0020, which is exactly why the gesture fired
+// on Chrome (ASCII space) but not on Safari (CJK/full-width space).
+const SPACE_CHARS = ' \u3000\u00A0'
+const SPACE_CHAR_RE = new RegExp(`^[${SPACE_CHARS}]$`)
 // R1 (macOS): the substitution's `data` is a period-like character,
 // optionally followed by exactly one trailing space (English bakes the
 // space in; Chinese/Japanese/Korean doesn't). A literal ` ?` rather than
@@ -108,7 +117,7 @@ const PERIOD_CHAR_RE = new RegExp(`^[${PERIOD_CHARS}]$`)
 // The defensive check `stripTrailingGestureResidue` runs before removing
 // anything: every trailing character it's about to strip must individually
 // be either a literal space or one of the period-like characters above.
-const GESTURE_RESIDUE_CHAR_RE = new RegExp(`^[ ${PERIOD_CHARS}]$`)
+const GESTURE_RESIDUE_CHAR_RE = new RegExp(`^[${SPACE_CHARS}${PERIOD_CHARS}]$`)
 
 export interface SpaceGestureState {
   /** The element the current run is happening in — a run never carries over across a focus change. */
@@ -286,7 +295,7 @@ export function reduceSpaceGesture(
   if (state.justSubstitutedAt !== null) {
     const sameElement = state.element === element
     const withinWindow = now - state.justSubstitutedAt <= SAME_TAP_WINDOW_MS
-    if (sameElement && withinWindow && event.inputType === 'insertText' && event.data === ' ') {
+    if (sameElement && withinWindow && event.inputType === 'insertText' && event.data !== null && SPACE_CHAR_RE.test(event.data)) {
       // `tapCount` intentionally does not advance here — this space is the
       // second DOM event of the *same* physical keystroke the substitution
       // below already counted once. Advancing it again would let two iOS
@@ -363,7 +372,7 @@ export function reduceSpaceGesture(
   // graceful degradation this reducer already had for anything it doesn't
   // specifically recognize (e.g. an Android autocorrect variant no
   // available trace covers).
-  if (event.inputType !== 'insertText' || event.data !== ' ') {
+  if (event.inputType !== 'insertText' || event.data === null || !SPACE_CHAR_RE.test(event.data)) {
     return RESET
   }
   const tapCount = (continuesRun ? state.tapCount : 0) + 1
@@ -470,7 +479,8 @@ export function shouldAbsorbGestureMenuInput(
   if (
     event.isComposing ||
     event.inputType !== 'insertText' ||
-    event.data !== ' ' ||
+    event.data === null ||
+    !SPACE_CHAR_RE.test(event.data) ||
     now - state.lastTime > SPACE_GESTURE_MAX_GAP_MS
   ) {
     return { state, absorb: false }

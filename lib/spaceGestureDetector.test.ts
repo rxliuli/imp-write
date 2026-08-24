@@ -79,6 +79,28 @@ describe('reduceSpaceGesture', () => {
     expect(result.state).toEqual(INITIAL_SPACE_GESTURE_STATE)
   })
 
+  // Regression for the Safari/macOS CJK input case: some keyboards (and
+  // full-width input modes) emit the ideographic space U+3000 instead of the
+  // plain ASCII space U+0020, and French locales U+00A0. input-translator's
+  // prior UniversalSpaceDetector recognized all three; imp-write's original
+  // `data === ' '` only matched U+0020, so the gesture never fired on Safari.
+  it('recognizes the ideographic (U+3000) and non-breaking (U+00A0) spaces (Safari CJK / French)', () => {
+    for (const data of ['\u3000', '\u00A0']) {
+      let state = INITIAL_SPACE_GESTURE_STATE
+      const now = 1_000
+      for (let i = 0; i < SPACE_GESTURE_TARGET_COUNT; i++) {
+        const result = reduceSpaceGesture(
+          state,
+          input,
+          spaceInputEvent({ data }),
+          now + i * 10,
+        )
+        expect(result.fire).toBe(i === SPACE_GESTURE_TARGET_COUNT - 1)
+        state = result.state
+      }
+    }
+  })
+
   it('a 4th space keystroke right after firing starts a brand new run rather than re-firing immediately', () => {
     let state = INITIAL_SPACE_GESTURE_STATE
     const now = 1_000
@@ -264,7 +286,7 @@ describe('reduceSpaceGesture', () => {
     expect(result.state).toEqual(INITIAL_SPACE_GESTURE_STATE)
   })
 
-  it('a full-width (CJK) or other space-like character does not count as a real space', () => {
+  it('a full-width (CJK) space does count as a real space (Safari/macOS CJK), advancing the run', () => {
     const result = reduceSpaceGesture(
       INITIAL_SPACE_GESTURE_STATE,
       input,
@@ -272,7 +294,9 @@ describe('reduceSpaceGesture', () => {
       1_000,
     )
     expect(result.fire).toBe(false)
-    expect(result.state).toEqual(INITIAL_SPACE_GESTURE_STATE)
+    expect(result.state.tapCount).toBe(1)
+    expect(result.state.residueLen).toBe(1)
+    expect(result.state.element).toBe(input)
   })
 })
 

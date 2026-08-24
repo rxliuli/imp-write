@@ -1,17 +1,16 @@
 import { browser } from 'wxt/browser'
 
-// Storage flag to force gesture debug logging on a *production* build, where
-// `import.meta.env.DEV` is `false` (Vite inlines it). Not part of `Settings`
-// — read straight from `browser.storage.local`, the same convention as
-// `lib/testHooks.ts`'s test-override keys, so it can't leak into a user's
-// real settings blob. Set it from the service worker console while debugging
-// on a real device:
+// Storage flag to turn gesture debug logging on for a *production* build,
+// where `import.meta.env.DEV` is `false` (Vite inlines it). Not part of
+// `Settings` — read straight from `browser.storage.local`, the same
+// convention as `lib/testHooks.ts`'s test-override keys, so it can't leak
+// into a user's real settings blob. On a dev build (`wxt dev`) it's on by
+// default, so no flag is needed there.
+//
+// To force it on for a production build, run this once in the extension's
+// Service Worker console, then reload the page:
 //
 //   chrome.storage.local.set({ __impWriteGestureDebug: true })
-//
-// The whole module is a dev-only aid; the `gestureDebug` calls are pure
-// `console.debug` (invisible at the default log level) and a no-op when
-// disabled, so a production build at worst omits them.
 const GESTURE_DEBUG_KEY = '__impWriteGestureDebug'
 
 let enabled = import.meta.env.DEV
@@ -37,5 +36,5 @@ export async function initGestureDebug(): Promise<void> {
 /** Debug-only logger for the space-gesture path. No-op unless enabled. */
 export function gestureDebug(...args: unknown[]): void {
   if (!enabled) return
-  console.debug('[imp-write/gesture]', ...args)
+  console.log('[imp-write/gesture]', ...args)
 }

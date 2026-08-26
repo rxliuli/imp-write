@@ -29,6 +29,14 @@ function okResponse(content: string) {
   }
 }
 
+function okRewriteResponse(text: string) {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({ text }),
+  }
+}
+
 function errorResponse(status: number, body = `error ${status}`) {
   return {
     ok: false,
@@ -144,14 +152,16 @@ describe('runPrompt (per-provider request interceptors)', () => {
 })
 
 describe('runPrompt (imp mode)', () => {
-  it('calls the imp endpoint directly with the imp key', async () => {
-    const fetchFn = vi.fn().mockResolvedValue(okResponse('done'))
+  it('calls /rewrite with the imp key and returns the text', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(okRewriteResponse('done'))
     const result = await runPrompt(impProvider('imp_abc'), 'p', fetchFn)
     expect(result).toBe('done')
     expect(fetchFn).toHaveBeenCalledWith(
-      'https://imp.example.com/v1/chat/completions',
+      'https://imp.example.com/v1/rewrite',
       expect.objectContaining({
+        method: 'POST',
         headers: expect.objectContaining({ Authorization: 'Bearer imp_abc' }),
+        body: JSON.stringify({ prompt: 'p' }),
       }),
     )
   })

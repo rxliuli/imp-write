@@ -1,4 +1,4 @@
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import { cors } from 'hono/cors'
 import { serve } from '@hono/node-server'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
@@ -65,15 +65,15 @@ const app = new Hono()
 
 app.use('/v1/*', cors())
 
-// Mirrors the one OpenAI-compatible endpoint lib/ai-client.ts calls:
-// POST {baseUrl}/chat/completions with a single user message containing the
-// fully-rendered prompt (command template + `{{text}}` already substituted).
-// The response wraps that entire received content in `[MOCK]...` so tests
-// can assert both "a replacement happened" (contains `[MOCK]`) and "the
-// trigger token didn't leak into the AI call" (doesn't contain `/fix` etc,
-// since content.ts strips the token before building the prompt).
-app.post('/v1/chat/completions', async (c) => {
-  const data = await c.req.json()
+// Applies the shared mock behavior (record, optional delay, programmable
+// failmode) to a request, then builds the success response via `success`.
+// Both the BYOK `/v1/chat/completions` and the imp `/v1/rewrite` routes use
+// this so the request log / delay / fail state is consistent across modes.
+async function respondMock(
+  c: Context,
+  success: (data: any) => unknown,
+): Promise<Response> {
+  const data = (await c.req.json()) as any
   mockState.requests.push({ body: data, receivedAt: Date.now() })
   // Lets tests hold the response open long enough to switch tabs (or do
   // anything else async) before the write-back races against it — see
@@ -89,9 +89,33 @@ app.post('/v1/chat/completions', async (c) => {
     const { status, body } = mockState.failMode
     return c.json(body, status as ContentfulStatusCode)
   }
-  const content: string = data.messages?.[0]?.content ?? ''
-  return c.json({
-    choices: [{ message: { role: 'assistant', content: `[MOCK]${content}` } }],
+  return c.json(success(data))
+}
+
+// Mirrors the one OpenAI-compatible endpoint lib/ai-client.ts calls for
+// `provider.mode === 'byok'`: POST {baseUrl}/chat/completions with a single
+// user message containing the fully-rendered prompt (command template +
+// `{{text}}` already substituted). The response wraps that entire received
+// content in `[MOCK]...` so tests can assert both "a replacement happened"
+// (contains `[MOCK]`) and "the trigger token didn't leak into the AI call"
+// (doesn't contain `/fix` etc, since content.ts strips the token before
+// building the prompt).
+app.post('/v1/chat/completions', async (c) => {
+  return respondMock(c, (data) => {
+    const content: string = data.messages?.[0]?.content ?? ''
+    return {
+      choices: [{ message: { role: 'assistant', content: `[MOCK]${content}` } }],
+    }
+  })
+})
+
+// Mirrors the Imp Credits `/rewrite` endpoint lib/ai-client.ts calls for
+// `provider.mode === 'imp'` (via the SDK's `rewrite`): POST {baseUrl}/rewrite
+// with `{ prompt }`, responds `{ text }` wrapping the prompt in `[MOCK]...`.
+app.post('/v1/rewrite', async (c) => {
+  return respondMock(c, (data) => {
+    const prompt: string = typeof data.prompt === 'string' ? data.prompt : ''
+    return { text: `[MOCK]${prompt}` }
   })
 })
 

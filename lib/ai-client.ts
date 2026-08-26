@@ -1,21 +1,16 @@
+import { ApiError, humanizeError, rewrite } from '@rxliuli/imp-credits-sdk'
 import { applyRequestInterceptors, type OpenAIRequest } from './interceptors'
 import type { ProviderSettings } from './settings'
 
+// Re-export so callers (background) and tests keep importing these from here;
+// they're the SDK's single source of truth for error shape + user-facing copy.
+export { ApiError, humanizeError }
+
 /**
- * An error from an OpenAI-compatible endpoint, carrying the HTTP status (when
- * there is one) so callers can build human-readable messages without
- * re-parsing response text.
+ * BYOK path: a plain OpenAI-compatible call to the user's own endpoint. The
+ * SDK only covers the Imp Credits metered API (`/rewrite`); BYOK is not Imp
+ * Credits, so it stays here with its per-provider interceptors.
  */
-export class ApiError extends Error {
-  status?: number
-
-  constructor(message: string, status?: number) {
-    super(message)
-    this.name = 'ApiError'
-    this.status = status
-  }
-}
-
 async function chatCompletion(
   baseUrl: string,
   apiKey: string,
@@ -60,10 +55,10 @@ async function chatCompletion(
 
 /**
  * Runs a single already-rendered prompt against the configured provider.
- * Both modes are a single direct call with no retry/failover — `imp` relies
- * on the service managing its own reliability, and `byok` only ever has one
- * configured key. Every failure is thrown as-is for the caller to
- * `humanizeError`.
+ * `imp` goes through the SDK's `/rewrite` (the server owns model selection,
+ * billing and error semantics; we render the prompt). `byok` is a direct
+ * OpenAI-compatible call with no retry/failover. Every failure is thrown as-is
+ * for the caller to `humanizeError`.
  */
 export async function runPrompt(
   provider: ProviderSettings,
@@ -74,13 +69,13 @@ export async function runPrompt(
     if (!provider.imp) {
       throw new ApiError('Connect your Imp account in the extension settings')
     }
-    return chatCompletion(
-      provider.imp.baseUrl,
-      provider.imp.apiKey,
-      provider.imp.model,
-      finalPrompt,
+    const { text } = await rewrite({
+      baseUrl: provider.imp.baseUrl,
+      apiKey: provider.imp.apiKey,
+      prompt: finalPrompt,
       fetchFn,
-    )
+    })
+    return text
   }
 
   const { apiKey, baseUrl, model } = provider.byok
@@ -88,48 +83,4 @@ export async function runPrompt(
     throw new ApiError('Add an API key in the extension settings')
   }
   return chatCompletion(baseUrl, apiKey, model, finalPrompt, fetchFn)
-}
-
-/**
- * Turns a raw error from `runPrompt` into a short, user-facing message.
- * `mode` matters: the same status code means different things for the
- * Imp Credits service (billing) vs. a BYOK provider (auth/config).
- */
-export function humanizeError(error: unknown, mode: ProviderSettings['mode']): string {
-  if (error instanceof ApiError) {
-    if (mode === 'imp') {
-      if (error.status === 402) {
-        // No external purchase link here: pointing users at an off-app
-        // top-up page violates App Store guideline 3.1.1 (anti-steering).
-        // Keep it as plain text only — the purchase flow lives off-app.
-        return 'Insufficient credits — top up on the Imp website'
-      }
-      if (error.status === 429) return 'Rate limited — try again in a moment'
-      if (error.status === 401) {
-        return 'Your Imp connection has expired — reconnect from the extension settings'
-      }
-      if (error.status !== undefined && error.status >= 500) {
-        return 'Imp Credits service error — try again later'
-      }
-    } else {
-      if (error.status === 401) return 'Invalid API key'
-      if (error.status === 403) return 'Forbidden — check your API key permissions'
-      if (error.status === 429) return 'Rate limited — try again in a moment'
-      if (error.status === 404) {
-        return 'Model or URL not found — verify the base URL and model name'
-      }
-      if (error.status === 400) {
-        return 'Bad request — check your model name and base URL'
-      }
-      if (error.status !== undefined && error.status >= 500) {
-        return 'Provider error — try again later'
-      }
-    }
-  }
-
-  const message = error instanceof Error ? error.message : String(error)
-  if (message.toLowerCase().includes('failed to fetch')) {
-    return 'Cannot reach the server — check the base URL and your network.'
-  }
-  return message
 }

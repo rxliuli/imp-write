@@ -1,3 +1,4 @@
+import { checkConnection, exchangeCode } from '@rxliuli/imp-credits-sdk'
 import { humanizeError, runPrompt } from '@/lib/ai-client'
 import { applyTemplate, TRIGGER_PREFIX } from '@/lib/commands'
 import { IMP_ORIGIN } from '@/lib/imp'
@@ -200,24 +201,11 @@ export default defineBackground(() => {
       return { ok: false, error: 'not connected' } as const
     }
     try {
-      const res = await fetch(`${imp.baseUrl}/me`, {
-        // Explicitly exclude the browser's session cookie — the status check
-        // must reflect the KEY only. `/me` accepts session-OR-key, so a
-        // logged-in user's cookie would otherwise make a revoked key still
-        // return 200 and the badge show "Connected" while real requests 401.
-        credentials: 'omit',
-        headers: { authorization: `Bearer ${imp.apiKey}` },
-      })
-      if (res.status === 401) return { ok: false, error: 'unauthorized' } as const
-      const contentType = res.headers.get('content-type') ?? ''
-      if (!contentType.includes('application/json')) {
-        return { ok: false, error: 'unexpected endpoint response' } as const
-      }
-      const body = (await res.json().catch(() => null)) as { email?: unknown } | null
-      if (typeof body?.email !== 'string') {
-        return { ok: false, error: 'unexpected endpoint response' } as const
-      }
-      return { ok: true } as const
+      // The SDK GETs {baseUrl}/me with `credentials: 'omit'` — the status
+      // check must reflect the KEY only. `/me` accepts session-OR-key, so a
+      // logged-in user's cookie would otherwise make a revoked key still
+      // return 200 and the badge show "Connected" while real requests 401.
+      return await checkConnection({ baseUrl: imp.baseUrl, apiKey: imp.apiKey })
     } catch (err) {
       console.error(
         '[imp-write] checkConnection failed:',
@@ -233,29 +221,14 @@ export default defineBackground(() => {
   messager.onMessage('impConnect', async (message) => {
     const code = message.data
     try {
-      const res = await fetch(`${IMP_ORIGIN}/api/connect/exchange`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code }),
-      })
-      const body = await res.json().catch(() => null)
-      if (!res.ok) {
-        const error =
-          (body as { error?: string } | null)?.error ??
-          `Connect failed with status ${res.status}`
-        return { ok: false, error }
-      }
-      const { apiKey, baseUrl, model } = body as {
-        apiKey: string
-        baseUrl: string
-        model: string
-      }
+      // The SDK exchanges the one-time code for { apiKey, baseUrl, model }.
+      const profile = await exchangeCode({ code, origin: IMP_ORIGIN })
       const current = await getSettings()
       await saveSettings({
         provider: {
           ...current.provider,
           mode: 'imp',
-          imp: { apiKey, baseUrl, model },
+          imp: profile,
         },
       })
       return { ok: true }
@@ -264,10 +237,9 @@ export default defineBackground(() => {
         '[imp-write] impConnect failed:',
         err instanceof Error ? err.message : err,
       )
-      return {
-        ok: false,
-        error: 'Could not reach the Imp Credits service — please retry.',
-      }
+      // Humanize in `imp` mode so a 400 (invalid/already-used code) and a
+      // network error both become something the banner can say.
+      return { ok: false, error: humanizeError(err, 'imp') }
     }
   })
 })

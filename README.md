@@ -119,7 +119,8 @@ Safari extension requires macOS environment and Xcode for building and publishin
 #### Build Steps
 
 1. Update `developmentTeam` in `wxt.config.ts` with your Apple Developer Team ID
-2. Run `pnpm build:safari` - this will automatically build and open Xcode
+2. Run `pnpm build:safari` - this will automatically build the Xcode project
+   (then open it in Xcode manually to test)
 3. Build the project in Xcode and test in Safari
 4. To publish: In Xcode, select **Product → Archive** to submit to the App Store
 

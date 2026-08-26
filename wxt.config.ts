@@ -18,7 +18,9 @@ export default defineConfig({
       developmentTeam: 'N2X78TUUFG',
       issuerId: '48f39427-c063-4e33-98d2-31de80aad0be',
       keyId: '8N27UWG9RG',
-      openProject: true,
+      // Keep Xcode closed after conversion: opening it on a headless
+      // macOS CI runner can fail (non-zero exit) and break the safari job.
+      openProject: false,
     },
   },
   vite: () => ({

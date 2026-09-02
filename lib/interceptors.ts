@@ -8,7 +8,6 @@ export interface OpenAIRequest {
 export type RequestInterceptor = (req: OpenAIRequest) => void
 
 const OPENAI_LEGACY_MODELS = /\bgpt-(3|4)/
-const OPENAI_GPT5_BASE = /\bgpt-5\b$/
 
 /**
  * Safely reads the hostname of `req.endpoint`. imp-write's BYOK base URL is
@@ -26,11 +25,11 @@ function safeHostname(endpoint: string): string | undefined {
 function disableOpenAIReasoning(req: OpenAIRequest): void {
   if (safeHostname(req.endpoint) !== 'api.openai.com') return
   if (OPENAI_LEGACY_MODELS.test(req.model)) return
-  if (OPENAI_GPT5_BASE.test(req.model)) {
-    req.body.reasoning_effort = 'minimal'
-    return
-  }
-  req.body.reasoning_effort = 'none'
+  // gpt-5 family: push reasoning effort to its floor so the input-box rewrite
+  // stays fast. `none` is the ideal "off", but newer variants (gpt-5-mini,
+  // gpt-5.1, ...) reject it with a 400 — `minimal` is the lowest value the
+  // whole family accepts (and is what bare `gpt-5` already used).
+  req.body.reasoning_effort = 'minimal'
 }
 
 function disableDeepSeekThinking(req: OpenAIRequest): void {

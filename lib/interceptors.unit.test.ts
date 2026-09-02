@@ -22,16 +22,16 @@ describe('disableOpenAIReasoning', () => {
     expect(req.body.reasoning_effort).toBe('minimal')
   })
 
-  it('sets reasoning_effort=none for gpt-5-mini', () => {
+  it('sets reasoning_effort=minimal for gpt-5-mini', () => {
     const req = makeReq('gpt-5-mini')
     applyRequestInterceptors(req)
-    expect(req.body.reasoning_effort).toBe('none')
+    expect(req.body.reasoning_effort).toBe('minimal')
   })
 
-  it('sets reasoning_effort=none for gpt-5.1', () => {
+  it('sets reasoning_effort=minimal for gpt-5.1', () => {
     const req = makeReq('gpt-5.1')
     applyRequestInterceptors(req)
-    expect(req.body.reasoning_effort).toBe('none')
+    expect(req.body.reasoning_effort).toBe('minimal')
   })
 
   it('does NOT set for gpt-4o (legacy family is skipped)', () => {

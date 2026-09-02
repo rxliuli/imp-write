@@ -72,22 +72,22 @@ jobs:
           store: chrome
           api-key: ${{ secrets.EXTPORT_API_KEY }}
 
-      # - name: Push to Edge Add-ons
-      #   uses: extport-dev/actions/push@v1
-      #   with:
-      #     # Edge is Chromium-based — extport falls back to the chrome zip
-      #     # when no dedicated edge one was built.
-      #     store: edge
-      #     api-key: ${{ secrets.EXTPORT_API_KEY }}
+      - name: Push to Edge Add-ons
+        uses: extport-dev/actions/push@v1
+        with:
+          # Edge is Chromium-based — extport falls back to the chrome zip
+          # when no dedicated edge one was built.
+          store: edge
+          api-key: ${{ secrets.EXTPORT_API_KEY }}
 
-      # - name: Push to Firefox AMO
-      #   uses: extport-dev/actions/push@v1
-      #   with:
-      #     # file/version/source-zip all inferred from .output/ and its manifest.json
-      #     # (WXT produces imp-write-{version}-sources.zip for the firefox build,
-      #     # which the action picks up automatically).
-      #     store: firefox
-      #     api-key: ${{ secrets.EXTPORT_API_KEY }}
+      - name: Push to Firefox AMO
+        uses: extport-dev/actions/push@v1
+        with:
+          # file/version/source-zip all inferred from .output/ and its manifest.json
+          # (WXT produces imp-write-{version}-sources.zip for the firefox build,
+          # which the action picks up automatically).
+          store: firefox
+          api-key: ${{ secrets.EXTPORT_API_KEY }}
 
   # Safari: build, sign, and upload the binary from macOS with your own
   # Apple credentials — the one store where CI must hold signing material

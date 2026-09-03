@@ -28,6 +28,11 @@ export default defineContentScript({
   matches:
     import.meta.env.COMMAND === 'serve' ? [PROD_MATCH, ...DEV_MATCHES] : [PROD_MATCH],
   main: async () => {
+    // Apple (Safari/iOS/macOS) builds are BYOK-only — the Imp Credits
+    // connect flow is intentionally off so the app never accesses credits
+    // purchased outside the App Store (see ProviderSection / Guideline 3.1.1).
+    if (import.meta.env.SAFARI) return
+
     // The one-time code lives only in this meta tag, never in the URL — see
     // PLAN.md §6. If it's missing, this isn't the page state we expect
     // (e.g. loaded before the user finished connecting); stay silent.

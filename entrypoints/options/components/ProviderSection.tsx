@@ -30,10 +30,15 @@ export function ProviderSection({
   update: (patch: Partial<Settings>) => void
 }) {
   const provider = settings.provider
-  const connected = provider.mode === 'imp' && !!provider.imp
+  // Apple (Safari/iOS/macOS) builds are BYOK-only: exposing the Imp Credits
+  // hosted connect here is what Guideline 3.1.1 rejected (credits bought
+  // outside IAP). Chrome/Firefox keep the hosted connect. See the review
+  // notes (Submission f2f34bd8) for context.
+  const isSafari = import.meta.env.SAFARI
+  const connected = provider.mode === 'imp' && !!provider.imp && !isSafari
 
   const [byokOpen, setByokOpen] = useState(
-    () => provider.mode === 'byok' && !!provider.byok.apiKey,
+    () => isSafari || (provider.mode === 'byok' && !!provider.byok.apiKey),
   )
 
   const [baseUrlDraft, setBaseUrlDraft] = useState(provider.byok.baseUrl)
@@ -128,8 +133,9 @@ export function ProviderSection({
       <CardHeader>
         <CardTitle>Provider</CardTitle>
         <CardDescription>
-          Connect a hosted Imp account, or bring your own OpenAI-compatible
-          API key.
+          {isSafari
+            ? 'Bring your own OpenAI-compatible API key.'
+            : `Connect a hosted Imp account, or bring your own OpenAI-compatible API key.`}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -148,7 +154,7 @@ export function ProviderSection({
               </Button>
             </div>
           </div>
-        ) : (
+        ) : isSafari ? null : (
           <div className="space-y-2">
             <Button className="w-full" onClick={connect}>
               Connect Imp Account

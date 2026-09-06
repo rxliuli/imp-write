@@ -1,20 +1,18 @@
 // @ts-nocheck
+import { addDocumentStyle, removeDocumentStyle } from './addStyle'
 import { getCaretOffset } from './caret'
 
 export class InputLoader {
   constructor() {
     this.loaderElement = null
-    this.styleElement = null
     this.isVisible = false
     this.initStyles()
   }
 
   initStyles() {
-    if (document.getElementById('input-loader-styles')) return
-
-    this.styleElement = document.createElement('style')
-    this.styleElement.id = 'input-loader-styles'
-    this.styleElement.textContent = `
+    // A constructable stylesheet (not an inline <style>) so it survives a
+    // host page whose CSP forbids inline styles — see lib/addStyle.ts.
+    addDocumentStyle('input-loader-styles', `
       .input-loader-container {
         position: absolute;
         display: inline-flex;
@@ -54,8 +52,7 @@ export class InputLoader {
           transform: scale(1.2);
         }
       }
-    `
-    document.head.appendChild(this.styleElement)
+    `)
   }
 
   // 判断是否是可编辑元素
@@ -243,10 +240,7 @@ export class InputLoader {
 
   destroy() {
     this.hide()
-    if (this.styleElement) {
-      this.styleElement.remove()
-      this.styleElement = null
-    }
+    removeDocumentStyle('input-loader-styles')
     this.isVisible = false
   }
 

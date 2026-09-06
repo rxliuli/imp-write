@@ -1,3 +1,4 @@
+import { addDocumentStyle, applyShadowStyle } from './addStyle'
 import { getCaretOffset } from './caret'
 import { TRIGGER_PREFIX } from './commands'
 import type { Command } from './settings'
@@ -207,6 +208,10 @@ const MENU_STYLES = `
   }
   .imp-write-menu {
     box-sizing: border-box;
+    /* Set the font here (not just on :host) — a host page's universal font
+       rule can beat :host, but it can never reach this shadow child, so the
+       menu's typography stays deterministic. */
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     min-width: 220px;
     max-width: min(320px, calc(100vw - 16px));
     background: var(--imp-menu-bg);
@@ -407,9 +412,7 @@ export class CommandMenu {
     })
 
     const shadow = host.attachShadow({ mode: 'open' })
-    const style = document.createElement('style')
-    style.textContent = MENU_STYLES
-    shadow.appendChild(style)
+    applyShadowStyle(shadow, MENU_STYLES)
     shadow.appendChild(this.buildMenuElement(target, commands))
 
     document.body.appendChild(host)
@@ -663,15 +666,14 @@ export function hideNoTargetToast(): void {
 }
 
 function ensureToastStyles(): void {
-  if (document.getElementById(TOAST_STYLE_ID)) return
-  const style = document.createElement('style')
-  style.id = TOAST_STYLE_ID
   // Same custom-property-with-dark-media-override approach as
   // `MENU_STYLES` above — this toast isn't shadow-hosted (it's static text,
   // not interactive; see its doc comment), but it should still follow the
   // system color scheme rather than staying hard-coded, and a light-mode
   // shadow alone would similarly vanish against an already-dark page.
-  style.textContent = `
+  // A constructable stylesheet (not an inline <style>) so it survives a host
+  // page whose CSP forbids inline styles — see lib/addStyle.ts.
+  addDocumentStyle(TOAST_STYLE_ID, `
     #${TOAST_ID} {
       position: fixed;
       left: 50%;
@@ -705,8 +707,7 @@ function ensureToastStyles(): void {
     #${TOAST_ID}.${TOAST_VISIBLE_CLASS} {
       opacity: 1;
     }
-  `
-  document.head.appendChild(style)
+  `)
 }
 
 /**

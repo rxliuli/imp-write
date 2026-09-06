@@ -1,3 +1,4 @@
+import { addDocumentStyle } from './addStyle'
 import { getCaretOffset } from './caret'
 
 const HINT_ID = 'imp-write-hint'
@@ -20,11 +21,9 @@ let hideTimer: ReturnType<typeof setTimeout> | null = null
 let fadeOutTimer: ReturnType<typeof setTimeout> | null = null
 
 function ensureStyles(): void {
-  if (document.getElementById(HINT_STYLE_ID)) return
-
-  const style = document.createElement('style')
-  style.id = HINT_STYLE_ID
-  style.textContent = `
+  // A constructable stylesheet (not an inline <style>) so it survives a host
+  // page whose CSP forbids inline styles — see lib/addStyle.ts.
+  addDocumentStyle(HINT_STYLE_ID, `
     #${HINT_ID} {
       position: fixed;
       z-index: 2147483647;
@@ -48,8 +47,7 @@ function ensureStyles(): void {
     #${HINT_ID}.${HINT_VISIBLE_CLASS} {
       opacity: 1;
     }
-  `
-  document.head.appendChild(style)
+  `)
 }
 
 /**

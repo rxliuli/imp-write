@@ -9,6 +9,7 @@ import { getSortedCommands, recordCommandUsed } from '@/lib/commandRecency'
 import { parseCommandTrigger, TRIGGER_PREFIX } from '@/lib/commands'
 import { showHint } from '@/lib/hint'
 import { IdleTriggerDetector, type CandidateMatch } from '@/lib/IdleTriggerDetector'
+import { isInformativeInputEvent } from '@/lib/inputEvent'
 import { InputLoader } from '@/lib/loading'
 import { messager } from '@/lib/message'
 import { matchShortcut } from '@/lib/shortcutHandler'
@@ -528,10 +529,11 @@ export default defineContentScript({
       document.addEventListener(
         'input',
         (e) => {
-          if (!(e instanceof InputEvent)) {
-            spaceGestureState = INITIAL_SPACE_GESTURE_STATE
-            return
-          }
+          // A page's own synthetic `input` re-dispatch (empty `inputType` —
+          // Reddit's composer fires one after every real keystroke) is
+          // ignored outright: resetting here would break the run the real
+          // keystroke just extended. See `isInformativeInputEvent`.
+          if (!isInformativeInputEvent(e)) return
           const active = getActiveElement()
           const element = active && isInputElement(active) ? active : null
           const now = Date.now()

@@ -260,6 +260,15 @@ export function reduceSpaceGesture(
   event: SpaceGestureInputEvent,
   now: number,
 ): SpaceGestureMatch {
+  // A page's own synthetic `input` re-dispatch (empty `inputType`) carries
+  // no information about what changed — ignore it outright rather than
+  // resetting the run, the same way `isInformativeInputEvent` handles the
+  // idle detector's stream. content.ts filters these out before calling in;
+  // this guard keeps the reducer correct for any other caller.
+  if (!event.inputType) {
+    return { state, fire: false, residueLen: state.residueLen }
+  }
+
   if (event.isComposing) {
     return { state, fire: false, residueLen: state.residueLen }
   }

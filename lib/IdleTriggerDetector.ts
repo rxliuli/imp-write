@@ -1,3 +1,4 @@
+import { isInformativeInputEvent } from './inputEvent'
 import { getActiveElement, isInputElement } from './selection'
 
 export interface CandidateMatch {
@@ -56,6 +57,11 @@ export interface IdleTriggerDetectorOptions {
  *   candidate token — **disarms** the detector and cancels any pending
  *   timer outright. A disarmed detector schedules nothing, no matter what
  *   the content looks like.
+ * - A page's own synthetic `input` re-dispatch (empty `inputType`, e.g.
+ *   Reddit's `<shreddit-composer>`) is **ignored** outright — it neither
+ *   arms, keeps armed, disarms, nor touches the pending timer, because it
+ *   carries no information about what changed. See
+ *   `lib/inputEvent.ts`'s `isInformativeInputEvent`.
  *
  * The pending timer's fire-time revalidation (element still focused,
  * content still a candidate) additionally requires still being armed.
@@ -111,18 +117,17 @@ export class IdleTriggerDetector {
   }
 
   private handleInput = (e: Event) => {
-    // Any new input unconditionally resets the pending wait window — a fresh
-    // keystroke means the user isn't idle yet. Whether it re-schedules is
-    // decided below.
-    this.clearTimer()
+    // Ignore a page's own synthetic re-dispatch before touching any state:
+    // these arrive right after the genuine keystroke they mirror, so
+    // clearing the pending timer here would cancel the very arming that
+    // keystroke just set up (the Reddit composer bug). See
+    // `isInformativeInputEvent`.
+    if (!isInformativeInputEvent(e)) return
 
-    if (!(e instanceof InputEvent)) {
-      // Can't classify a non-InputEvent `input` event (some non-browser
-      // dispatch) — disarm conservatively rather than risk arming on
-      // something that wasn't actually a typed insertion.
-      this.disarm()
-      return
-    }
+    // Any real new input unconditionally resets the pending wait window — a
+    // fresh keystroke means the user isn't idle yet. Whether it re-schedules
+    // is decided below.
+    this.clearTimer()
 
     // Composition-internal input events (e.g. picking a candidate while
     // typing Chinese/Japanese/Korean) aren't a real "keystroke" to evaluate

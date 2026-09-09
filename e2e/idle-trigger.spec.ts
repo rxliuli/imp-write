@@ -115,3 +115,29 @@ test('Esc reverts the replacement back to the original text', async ({ context, 
   expect(restored).toContain('/fix')
   expect(restored).toContain('hello world')
 })
+
+// Regression: Reddit's <shreddit-composer> re-dispatches a bare `input`
+// event (empty `inputType`) on its wrapper element after every real
+// keystroke. Before lib/inputEvent.ts, that second event was classified as
+// a non-insertText edit and disarmed the detector, cancelling the trigger
+// the genuine keystroke had just armed — so a command token typed in a
+// Reddit comment box never fired.
+test('still triggers when the page mirrors each keystroke with a synthetic input event (Reddit composer)', async ({
+  context,
+  baseURL,
+}) => {
+  await configureMockProvider(context, baseURL)
+  const page = await context.newPage()
+  await page.goto(baseURL)
+
+  const ce = page.locator('#ce-reddit')
+  await ce.click()
+  await ce.pressSequentially('hello world /fix', { delay: 20 })
+
+  await expect
+    .poll(() => ce.innerText(), { timeout: 5000 })
+    .toContain('[MOCK]')
+
+  const { count } = await getMockRequests(baseURL)
+  expect(count).toBe(1)
+})

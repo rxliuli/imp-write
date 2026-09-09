@@ -286,6 +286,30 @@ describe('reduceSpaceGesture', () => {
     expect(result.state).toEqual(INITIAL_SPACE_GESTURE_STATE)
   })
 
+  // Regression guard for the Reddit composer bug: the page re-dispatches a
+  // bare `input` event (empty `inputType`) after every real keystroke, which
+  // must be ignored rather than treated as an unrecognized input that breaks
+  // the run.
+  it('ignores a synthetic input event with no inputType instead of resetting the run', () => {
+    let state = INITIAL_SPACE_GESTURE_STATE
+    state = reduceSpaceGesture(state, input, spaceInputEvent(), 1_000).state
+    expect(state.tapCount).toBe(1)
+
+    const mirrored = reduceSpaceGesture(
+      state,
+      input,
+      { inputType: '', data: null, isComposing: false },
+      1_010,
+    )
+    expect(mirrored.fire).toBe(false)
+    expect(mirrored.state).toBe(state) // untouched, not just equal
+
+    const second = reduceSpaceGesture(mirrored.state, input, spaceInputEvent(), 1_020)
+    expect(second.state.tapCount).toBe(2)
+    const third = reduceSpaceGesture(second.state, input, spaceInputEvent(), 1_030)
+    expect(third.fire).toBe(true)
+  })
+
   it('a full-width (CJK) space does count as a real space (Safari/macOS CJK), advancing the run', () => {
     const result = reduceSpaceGesture(
       INITIAL_SPACE_GESTURE_STATE,

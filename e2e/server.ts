@@ -15,8 +15,24 @@ const pages: Record<string, string> = {
 <body>
   <textarea id="ta" rows="4" cols="60"></textarea>
   <div id="ce" contenteditable="true" role="textbox" style="border:1px solid #ccc; min-height:2em; padding:4px; width:400px;"></div>
+  <div id="reddit-composer">
+    <div id="ce-reddit" contenteditable="true" role="textbox" style="border:1px solid #ccc; min-height:2em; padding:4px; width:400px;"></div>
+  </div>
   <textarea id="ta1" rows="2" cols="30"></textarea>
   <textarea id="ta2" rows="2" cols="30"></textarea>
+  <script>
+    // Mirrors Reddit's <shreddit-composer>, which re-dispatches a bare
+    // input event (empty inputType, data null) on its wrapper element
+    // right after every real keystroke in the slotted contenteditable. This
+    // is the shape that used to disarm both trigger detectors — see
+    // lib/inputEvent.ts.
+    document.getElementById('ce-reddit').addEventListener('input', (e) => {
+      if (!e.inputType) return
+      document
+        .getElementById('reddit-composer')
+        .dispatchEvent(new InputEvent('input', { bubbles: true, composed: true }))
+    })
+  </script>
 </body>
 </html>`,
 }

@@ -442,3 +442,24 @@ test('with dozens of commands, the menu stays usable: Settings stays reachable a
   await expect.poll(() => list.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
   await expect(menuHost).toBeVisible()
 })
+
+// Same Reddit-composer regression as e2e/idle-trigger.spec.ts, for the
+// three-space gesture: the mirrored bare `input` events used to reset the
+// run after every real space keystroke, so the menu never appeared.
+test('three spaces still summon the menu when the page mirrors each keystroke (Reddit composer)', async ({
+  context,
+  baseURL,
+}) => {
+  await configureMockProvider(context, baseURL)
+  await enableSpaceGestureForTest(context)
+  const page = await context.newPage()
+  await page.goto(baseURL)
+
+  const ce = page.locator('#ce-reddit')
+  await ce.click()
+  await ce.pressSequentially('hello world', { delay: 20 })
+  await ce.pressSequentially('   ', { delay: 20 })
+
+  await expect(page.locator(MENU_HOST)).toBeVisible()
+  await expect(page.locator(FIX_BUTTON)).toBeVisible()
+})

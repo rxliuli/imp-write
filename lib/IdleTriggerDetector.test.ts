@@ -300,6 +300,80 @@ describe('IdleTriggerDetector', () => {
     detector.disable()
   })
 
+  // --- Bug: page-synthetic `input` re-dispatch (Reddit composer) ---
+  //
+  // Reddit's <shreddit-composer> mirrors every real keystroke by dispatching
+  // a bare `new InputEvent('input')` (inputType "", data null) on its
+  // wrapper element, which bubbles to the document-level listener *after*
+  // the genuine event. Before `isInformativeInputEvent`, that second event
+  // was classified as a non-insertText edit and disarmed the detector,
+  // cancelling the trigger the real keystroke had just armed — so a command
+  // token typed in a Reddit comment box never fired.
+  describe('synthetic input re-dispatch (Reddit composer)', () => {
+    /** Mirrors <shreddit-composer>: a bare `input` event on an ancestor, right after the real one. */
+    function dispatchMirror(el: HTMLElement) {
+      el.dispatchEvent(
+        new InputEvent('input', { bubbles: true, composed: true }),
+      )
+    }
+
+    it('still triggers when an ancestor re-dispatches a bare input event after the keystroke', async () => {
+      const onTrigger = vi.fn()
+      const detector = new IdleTriggerDetector({
+        isCandidate: isFixCandidate,
+        onTrigger,
+        idleMs: IDLE_MS,
+      })
+      detector.enable()
+
+      input.focus()
+      dispatchInsertText(input, 'hello /fix', 'x')
+      dispatchMirror(input.parentElement!)
+      await sleep(IDLE_MS + 150)
+
+      expect(onTrigger).toHaveBeenCalledTimes(1)
+      detector.disable()
+    })
+
+    it('ignores a plain Event("input") re-dispatch too', async () => {
+      const onTrigger = vi.fn()
+      const detector = new IdleTriggerDetector({
+        isCandidate: isFixCandidate,
+        onTrigger,
+        idleMs: IDLE_MS,
+      })
+      detector.enable()
+
+      input.focus()
+      dispatchInsertText(input, 'hello /fix', 'x')
+      input.parentElement!.dispatchEvent(
+        new Event('input', { bubbles: true }),
+      )
+      await sleep(IDLE_MS + 150)
+
+      expect(onTrigger).toHaveBeenCalledTimes(1)
+      detector.disable()
+    })
+
+    it('a lone synthetic re-dispatch never arms a trigger by itself', async () => {
+      const onTrigger = vi.fn()
+      const detector = new IdleTriggerDetector({
+        isCandidate: isFixCandidate,
+        onTrigger,
+        idleMs: IDLE_MS,
+      })
+      detector.enable()
+
+      input.focus()
+      input.value = 'hello /fix'
+      dispatchMirror(input.parentElement!)
+      await sleep(IDLE_MS + 150)
+
+      expect(onTrigger).not.toHaveBeenCalled()
+      detector.disable()
+    })
+  })
+
   // --- Bug 2026-08-22: browser-native undo (Cmd/Ctrl+Z) re-triggering ---
   //
   // A replacement's write-back leaves the original, token-ending text on the

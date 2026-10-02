@@ -34,7 +34,7 @@ export default defineConfig({
     const manifest: UserManifest = {
       name: 'Imp Write',
       description:
-        'AI fix & rewrite in any textbox — type /fix at the end and pause',
+        'Fix and rewrite text in any textbox on command. Bring your own API key or use Imp Credits, no subscription.',
       permissions: ['storage', 'contextMenus'],
       host_permissions: ['<all_urls>'],
       author: {

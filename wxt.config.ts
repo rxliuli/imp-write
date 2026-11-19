@@ -71,6 +71,8 @@ export default defineConfig({
     }
     if (env.browser === 'safari') {
       manifest.name = 'Imp Write'
+      manifest.description =
+        'Fix grammar & rewrite text in any textbox with /fix, /improve, /shorten. Press Esc to undo. BYOK or Imp.'
     }
     return manifest
   },

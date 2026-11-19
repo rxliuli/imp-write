@@ -32,9 +32,9 @@ export default defineConfig({
   manifestVersion: 3,
   manifest: (env) => {
     const manifest: UserManifest = {
-      name: 'Imp Write',
+      name: 'Imp Write: AI Fix & Rewrite in Any Textbox',
       description:
-        'Fix and rewrite text in any textbox on command. Bring your own API key or use Imp Credits, no subscription.',
+        'Fix grammar & rewrite text in any textbox with /fix, /improve, /shorten commands. Press Esc to undo. Use BYOK or Imp Credits.',
       permissions: ['storage', 'contextMenus'],
       host_permissions: ['<all_urls>'],
       author: {
@@ -49,15 +49,13 @@ export default defineConfig({
           '128': 'icon/128.png',
         },
       },
-      homepage_url: 'https://rxliuli.com/project/imp-write',
+      homepage_url: 'https://store.rxliuli.com/extensions/imp-write/',
     }
 
     if (env.browser === 'firefox') {
       manifest.browser_specific_settings = {
         gecko: {
-          id:
-            manifest.name!.toLowerCase().replaceAll(/[^a-z0-9]/g, '-') +
-            '@rxliuli.com',
+          id: 'imp-write@rxliuli.com',
           data_collection_permissions: {
             required: ['none'],
           },

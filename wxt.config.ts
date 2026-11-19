@@ -69,6 +69,9 @@ export default defineConfig({
       // @ts-expect-error
       manifest.author = 'rxliuli'
     }
+    if (env.browser === 'safari') {
+      manifest.name = 'Imp Write'
+    }
     return manifest
   },
   webExt: {
